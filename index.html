@@ -34,6 +34,17 @@
          leitet Benutzername+Repo aus window.location ab). Gleiche Logik wie
          in Vocabolario/Ucabulario, damit dieselbe config.xlsx-Konvention für
          beide Apps funktioniert.
+  v1.7 – Neu: "App komplett zurücksetzen"-Link auf der Deck-Auswahl (unterhalb
+         der Deck-Kacheln, dezent per .niveau-wechsel-Stil). Fragt per
+         confirm() nach, löscht dann "vocab-datei" sowie alle
+         "vocab-progress-*"-Keys und lädt die Seite per location.reload() neu
+         -- siehe setzeAppKomplettZurueck().
+  v1.8 – Link umbenannt in "Decks zurücksetzen". window.confirm() ersetzt
+         durch einen eigenen, zur App passenden Bestätigungs-Dialog
+         (zeigeBestaetigungsDialog(), generisch für künftige Ja/Nein-Abfragen)
+         -- der native Browser-confirm() rahmt sich selbst mit Text wie "Auf
+         dieser Seite wird Folgendes angezeigt" ein, was besonders bei
+         file://-Seiten unpassend aussieht und sich nicht stylen lässt.
 -->
 <html lang="de">
 <head>
@@ -397,6 +408,59 @@
   }
   .lade-status-fehler{ color: var(--mare); opacity:1; }
 
+  /* Eigener Bestätigungs-Dialog statt window.confirm() -- der native Browser-
+     Dialog rahmt sich selbst mit Text wie "Auf dieser Seite wird Folgendes
+     angezeigt" ein (besonders bei file://-Seiten auffällig) und lässt sich
+     optisch nicht an die App anpassen. */
+  .modal-overlay{
+    position:fixed;
+    inset:0;
+    background: rgba(23,50,79,0.55);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    z-index:1000;
+  }
+  .modal-box{
+    background: var(--carta);
+    border: 1.5px solid var(--inchiostro);
+    border-radius: 14px;
+    box-shadow: 5px 5px 0 var(--inchiostro);
+    padding: 22px 22px 18px;
+    max-width: 320px;
+    width:100%;
+  }
+  .modal-text{
+    font-size:14px;
+    line-height:1.5;
+    color: var(--inchiostro);
+    margin-bottom:18px;
+  }
+  .modal-buttons{
+    display:flex;
+    gap:10px;
+  }
+  .modal-btn{
+    flex:1;
+    border:none;
+    border-radius:10px;
+    padding:11px 0;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    font-family: inherit;
+  }
+  .modal-btn-abbrechen{
+    background: transparent;
+    border: 1.5px solid var(--inchiostro);
+    color: var(--inchiostro);
+  }
+  .modal-btn-bestaetigen{
+    background: var(--mare);
+    color: var(--carta);
+  }
+
   /* Stundenplan: kleine Kachel auf der Deck-Auswahl, bewusst unauffälliger
      (kleiner, blasserer Hintergrund, dünnerer Schatten) als die echten
      Deck-Kacheln -- signalisiert "andere Art von Inhalt, kein Lern-Deck". */
@@ -542,7 +606,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.6';
+const APP_VERSION = '1.8';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -651,6 +715,70 @@ async function speichereDatei(decks, stundenplan){
   try{ await window.storage.set('vocab-datei', JSON.stringify({ decks, stundenplan })); }catch(e){}
 }
 
+// Eigener Bestätigungs-Dialog als Ersatz für window.confirm() -- siehe
+// CSS-Kommentar bei .modal-overlay für den Grund. Baut ein Overlay direkt in
+// document.body (nicht in #stage, das ja beim Bildschirmwechsel überschrieben
+// wird) und gibt ein Promise<boolean> zurück, genau wie confirm() synchron
+// true/false liefert, nur eben asynchron -- daher wird die Funktion mit
+// "await" statt einer direkten Zuweisung aufgerufen. Generisch gehalten
+// (text + Beschriftung des Bestätigen-Buttons als Parameter), damit sie sich
+// für zukünftige "bist du sicher?"-Abfragen wiederverwenden lässt, nicht nur
+// für den App-Reset.
+function zeigeBestaetigungsDialog(text, bestaetigenText){
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal-box">
+        <div class="modal-text">${text}</div>
+        <div class="modal-buttons">
+          <button class="modal-btn modal-btn-abbrechen" id="modalAbbrechen">Abbrechen</button>
+          <button class="modal-btn modal-btn-bestaetigen" id="modalBestaetigen">${bestaetigenText}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const schliessen = ergebnis => { overlay.remove(); resolve(ergebnis); };
+    overlay.querySelector('#modalAbbrechen').onclick = () => schliessen(false);
+    overlay.querySelector('#modalBestaetigen').onclick = () => schliessen(true);
+    // Klick auf den dunklen Hintergrund selbst zählt wie "Abbrechen" --
+    // nur wenn e.target das Overlay selbst ist, nicht die Box darin (sonst
+    // würde auch ein Klick auf den Text die Box schließen).
+    overlay.onclick = e => { if(e.target === overlay) schliessen(false); };
+  });
+}
+
+// Setzt die komplette App zurück: löscht alle gespeicherten Daten (die
+// hochgeladene Datei inkl. Stundenplan, UND jeglichen Fortschritt in jedem
+// Deck) und lädt die Seite danach neu.
+//
+// Bewusst per location.reload() statt die In-Memory-Variablen (AKTIVE_DATEI,
+// DECK_NAME, VOKABELN, idx, punkte, STUNDENPLAN, ...) einzeln von Hand auf
+// ihren Ausgangswert zu setzen: ein Reload startet init() ganz neu und liest
+// dabei den (jetzt leeren) Storage neu ein -- das garantiert exakt denselben
+// Zustand wie beim allerersten echten Laden der App. Manuelles Zurücksetzen
+// müsste dagegen bei jeder neuen Variable, die später im Code dazukommt,
+// mitgepflegt werden und wäre eine wiederkehrende Fehlerquelle.
+async function setzeAppKomplettZurueck(){
+  const bestaetigt = await zeigeBestaetigungsDialog(
+    'Wirklich alle Decks zurücksetzen?<br><br>Alle geladenen Decks, der Stundenplan und der gesamte Lernfortschritt gehen dabei verloren. Das kann <strong>nicht</strong> rückgängig gemacht werden.',
+    'Zurücksetzen'
+  );
+  if(!bestaetigt) return;
+
+  try{
+    await window.storage.delete('vocab-datei');
+    await loescheAltenFortschritt();
+  }catch(e){
+    // Falls das Löschen (teilweise) fehlschlägt, trotzdem neu laden --
+    // dann zeigt die App wenigstens den tatsächlichen Ist-Zustand, statt in
+    // einem widersprüchlichen Zwischenstand hängen zu bleiben.
+  }
+
+  location.reload();
+}
+
 // Alte Fortschritts-Einträge löschen, wenn eine neue Datei hochgeladen wird —
 // sonst würde z.B. der Kartenindex eines alten Decks auf ein Deck mit anderem
 // Inhalt, aber gleichem Blattnamen, angewendet.
@@ -732,12 +860,15 @@ function zeigeDeckAuswahl(){
       ${stundenplanKachel}
       <div class="niveau-frage">Welches Deck möchtest du lernen?</div>
       <div class="niveau-optionen">${kacheln}</div>
+      <div class="niveau-wechsel"><a id="btnAppZuruecksetzen">Decks zurücksetzen</a></div>
     </div>
   `;
 
   stage.querySelectorAll('[data-deck]').forEach(el => {
     el.onclick = () => waehleDeck(el.getAttribute('data-deck'));
   });
+
+  document.getElementById('btnAppZuruecksetzen').onclick = () => setzeAppKomplettZurueck();
 
   if(STUNDENPLAN){
     document.getElementById('btnStundenplan').onclick = () => zeigeStundenplan();
