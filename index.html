@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.4
+  SmartCards — Version 1.10
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -55,6 +55,11 @@
          andere Karte an Position 1 als vorher, was wie ein Sprung zu einer
          anderen Karte aussah. Reset ändert jetzt nur noch idx/punkte, die
          Kartenreihenfolge bleibt unangetastet.
+  v1.10 – Neu: Enthält seite3/seite4 eine Bild-URL (endet auf .jpg/.png/.gif/
+         .webp/.bmp/.svg, optional mit ?query), wird auf dieser Kartenseite
+         ein Bild statt Text gezeigt (istBildUrl(), gibFaceHTML()). Schlägt
+         das Laden fehl (kaputter Link, Bild gelöscht), erscheint statt eines
+         kaputten Bild-Icons ein kurzer Fehlertext (bildFehler()).
 -->
 <html lang="de">
 <head>
@@ -242,6 +247,20 @@
     color: var(--azzurro);
     max-width: 90%;
     white-space: pre-wrap;
+  }
+
+  .seite-bild{
+    max-width:100%;
+    max-height:100%;
+    object-fit:contain;
+    border-radius:10px;
+  }
+  .seite-bild-fehler{
+    font-size:13px;
+    line-height:1.5;
+    color: var(--carta);
+    opacity:0.7;
+    max-width:90%;
   }
 
   .controls{
@@ -615,7 +634,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.9';
+const APP_VERSION = '1.10';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -1040,7 +1059,7 @@ function zeigeUploadScreen(){
       <div class="upload-fehler" id="uploadFehler"></div>
       <div class="upload-info">
         Benötigte Spalten: <strong>frage</strong> (Vorderseite) · <strong>antwort</strong> (Rückseite)<br>
-        Optional: <strong>kat</strong> (Kategorie) · <strong>seite3</strong>, <strong>seite4</strong> (eigene Zusatzseiten, jede auf einer eigenen Kartenseite).<br>
+        Optional: <strong>kat</strong> (Kategorie) · <strong>seite3</strong>, <strong>seite4</strong> (eigene Zusatzseiten, jede auf einer eigenen Kartenseite -- eine Bild-URL statt Text zeigt dort das Bild).<br>
         Ein Arbeitsblatt namens <strong>Stundenplan</strong> wird nicht als Deck behandelt, sondern als eigene Stundenplan-Ansicht angezeigt.
       </div>
       <div style="margin-top:16px;">
@@ -1354,6 +1373,28 @@ function waehleSortierung(sortiert){
   render();
 }
 
+// Erkennt, ob eine Zelle (seite3/seite4) eine Bild-URL statt normalem Text
+// enthält -- dann wird auf dieser Kartenseite ein <img> statt Text gezeigt.
+// Bewusst nur gängige Bild-Dateiendungen (mit optionalem ?query danach, z.B.
+// bei CDN-Links), damit ein ganz normaler Textlink, der zufällig mit http
+// anfängt, nicht versehentlich als Bild interpretiert wird.
+function istBildUrl(text){
+  return /^https?:\/\/\S+\.(jpe?g|png|gif|webp|bmp|svg)(\?\S*)?$/i.test(text.trim());
+}
+
+// Callback für <img onerror="bildFehler(this)"> auf einer Bild-Seite: Bild
+// ausblenden und stattdessen einen kurzen Fehlertext an derselben Stelle
+// zeigen -- als globale Funktion, damit sie direkt aus dem HTML-Attribut
+// aufrufbar ist, ohne dass man dafür extra Anführungszeichen im
+// Template-String verschachteln müsste.
+function bildFehler(imgEl){
+  imgEl.style.display = 'none';
+  const fehler = document.createElement('div');
+  fehler.className = 'seite-bild-fehler';
+  fehler.textContent = 'Bild konnte nicht geladen werden.';
+  imgEl.insertAdjacentElement('afterend', fehler);
+}
+
 function gibFaceHTML(v, zustand){
   // Kleiner Hinweis oben rechts, dass es zu dieser Karte eine eigene Notiz gibt.
   // Nur auf front/back -- auf der Notiz-Seite selbst wäre er redundant.
@@ -1381,15 +1422,19 @@ function gibFaceHTML(v, zustand){
   }
   // zustand 2, 3, ... -- eine der Extra-Seiten aus extraSeiten(v). Jede bekommt
   // ihre eigene Karte mit eigenem Titel (Seite 3 / Seite 4) statt beide
-  // zusammen auf einer Seite zu zeigen.
+  // zusammen auf einer Seite zu zeigen. Ist der Inhalt eine Bild-URL, wird
+  // ein <img> gezeigt statt normalem Text (siehe istBildUrl).
   const seite = seiten[zustand - 2];
   const gibtWeitere = zustand - 2 + 1 < seiten.length;
   const hinweis = gibtWeitere
     ? `<div class="hinweis" style="opacity:0.5">Antippen für ${seiten[zustand - 1].titel}</div>`
     : '';
+  const inhaltHTML = istBildUrl(seite.text)
+    ? `<img class="seite-bild" src="${seite.text.replace(/"/g,'&quot;')}" alt="${seite.titel}" loading="lazy" onerror="bildFehler(this)">`
+    : `<div class="notiz-text">${seite.text}</div>`;
   return `<div class="face notiz">
     <div class="kategorie">${seite.titel}</div>
-    <div class="notiz-text">${seite.text}</div>
+    ${inhaltHTML}
     ${hinweis}
   </div>`;
 }
