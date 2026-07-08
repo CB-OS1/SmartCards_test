@@ -45,6 +45,16 @@
          -- der native Browser-confirm() rahmt sich selbst mit Text wie "Auf
          dieser Seite wird Folgendes angezeigt" ein, was besonders bei
          file://-Seiten unpassend aussieht und sich nicht stylen lässt.
+  v1.9 – Bestätigungstext beim Decks-Reset auf die reine Frage gekürzt.
+         Untertext auf dem "Sortiert oder gemischt?"-Screen entfernt, beide
+         Label-Farben dort vereinheitlicht (beide jetzt var(--mare), vorher
+         hatte "Sortiert" noch var(--cielo)). Bugfix: "Fortschritt
+         zurücksetzen" hat bei gemischtem Lernen (SORTIERT=false)
+         versehentlich das komplette Deck neu gemischt (vokabelnNeuLaden()
+         wurde unnötig mitaufgerufen) -- dadurch stand nach dem Reset eine
+         andere Karte an Position 1 als vorher, was wie ein Sprung zu einer
+         anderen Karte aussah. Reset ändert jetzt nur noch idx/punkte, die
+         Kartenreihenfolge bleibt unangetastet.
 -->
 <html lang="de">
 <head>
@@ -335,8 +345,7 @@
     margin-top: 4px;
     display:block;
   }
-  .niveau-btn.a1 .label{ color: var(--cielo); }
-  .niveau-btn.a2 .label{ color: var(--mare); }
+  .niveau-btn.a1 .label, .niveau-btn.a2 .label{ color: var(--mare); }
   .niveau-wechsel{
     text-align:center;
     margin-top: 12px;
@@ -606,7 +615,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.8';
+const APP_VERSION = '1.9';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -762,7 +771,7 @@ function zeigeBestaetigungsDialog(text, bestaetigenText){
 // mitgepflegt werden und wäre eine wiederkehrende Fehlerquelle.
 async function setzeAppKomplettZurueck(){
   const bestaetigt = await zeigeBestaetigungsDialog(
-    'Wirklich alle Decks zurücksetzen?<br><br>Alle geladenen Decks, der Stundenplan und der gesamte Lernfortschritt gehen dabei verloren. Das kann <strong>nicht</strong> rückgängig gemacht werden.',
+    'Wirklich alle Decks zurücksetzen?',
     'Zurücksetzen'
   );
   if(!bestaetigt) return;
@@ -1320,7 +1329,6 @@ function zeigeSortierAuswahl(){
   stage.innerHTML = `
     <div class="niveau-screen">
       <div class="niveau-frage">Sortiert oder gemischt lernen?</div>
-      <div class="niveau-unter">${AKTIVE_DATEI[DECK_NAME].length} Karten aus „${DECK_NAME}“. Sortiert = Reihenfolge wie in deiner Datei. Gemischt = zufällige Reihenfolge.</div>
       <div class="niveau-optionen">
         <div class="niveau-btn a1" id="btnSortiert">
           <span class="label">Sortiert</span>
@@ -1449,7 +1457,6 @@ function vorherige(){
 
 document.getElementById('resetLink').onclick = async () => {
   idx = 0;
-  VOKABELN = vokabelnNeuLaden();
   punkte = { heute:0 };
   await speichereFortschritt();
   aktualisiereStats();
