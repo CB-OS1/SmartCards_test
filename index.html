@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.12
+  SmartCards — Version 1.13
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -71,6 +71,12 @@
          an einer Stelle und wird sowohl von Frage-/Antwort-Seite als auch
          von den Zusatzseiten genutzt. Kategorie, Notiz-Badge und
          Hinweistexte bleiben davon unberührt.
+  v1.13 – "SmartCards"-Titel oben links im Header ist jetzt klickbar und
+         fungiert als Home-Button: bringt von jedem Bildschirm zurück zur
+         Deck-Auswahl ("Welches Deck möchtest du lernen?"), bzw. zum leeren
+         Zustand, falls noch keine Datei geladen wurde. Nutzt dieselben
+         Funktionen (zeigeDeckAuswahl/zeigeLeerenZustand) wie der bereits
+         vorhandene Link "Deck wechseln".
 -->
 <html lang="de">
 <head>
@@ -623,7 +629,7 @@
 <div class="app">
   <header>
     <div>
-      <div class="titel">Smart<em>Cards</em></div>
+      <div class="titel" id="titelHome" style="cursor:pointer;">Smart<em>Cards</em></div>
       <div class="untertitel" id="untertitelText">Karteikarten</div>
     </div>
   </header>
@@ -644,7 +650,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.12';
+const APP_VERSION = '1.13';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -1530,6 +1536,16 @@ document.getElementById('resetLink').onclick = async () => {
 
 document.getElementById('deckLink').onclick = () => {
   zeigeDeckAuswahl();
+};
+
+// "SmartCards"-Titel oben links fungiert als Home-Button: bringt von überall
+// (Lernkarten, Stundenplan, Lade-Bildschirm, ...) zurück zur Deck-Auswahl.
+// Ist noch gar keine Datei geladen, gäbe es dort nichts anzuzeigen (Object.keys
+// auf einem leeren AKTIVE_DATEI würde zwar nicht crashen, aber eine leere
+// Kachel-Liste zeigen) -- dasselbe Fallback-Muster wie bei "Abbrechen" im
+// Lade-Bildschirm (siehe zeigeLadenAuswahl).
+document.getElementById('titelHome').onclick = () => {
+  if(AKTIVE_DATEI) zeigeDeckAuswahl(); else zeigeLeerenZustand();
 };
 
 document.getElementById('linkVokabelnLaden').onclick = () => {
