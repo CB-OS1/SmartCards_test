@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.11
+  SmartCards — Version 1.12
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -65,6 +65,12 @@
          "SC"-Logo eingebunden: Bilddaten von Favicon (32x32) und
          Apple-Touch-Icon ausgetauscht, alle sonstigen Attribute dieser
          beiden Link-Tags unverändert gelassen.
+  v1.12 – Bild-Erkennung (istBildUrl()), die bisher nur auf seite3/seite4
+         lief, greift jetzt auch auf frage/antwort: neue Hilfsfunktion
+         gibInhaltHTML() bündelt Erkennung + Fehlerbehandlung (bildFehler())
+         an einer Stelle und wird sowohl von Frage-/Antwort-Seite als auch
+         von den Zusatzseiten genutzt. Kategorie, Notiz-Badge und
+         Hinweistexte bleiben davon unberührt.
 -->
 <html lang="de">
 <head>
@@ -638,7 +644,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.11';
+const APP_VERSION = '1.12';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -1377,8 +1383,9 @@ function waehleSortierung(sortiert){
   render();
 }
 
-// Erkennt, ob eine Zelle (seite3/seite4) eine Bild-URL statt normalem Text
-// enthält -- dann wird auf dieser Kartenseite ein <img> statt Text gezeigt.
+// Erkennt, ob eine Zelle (frage/antwort/seite3/seite4) eine Bild-URL statt
+// normalem Text enthält -- dann wird an dieser Stelle ein <img> statt Text
+// gezeigt.
 // Bewusst nur gängige Bild-Dateiendungen (mit optionalem ?query danach, z.B.
 // bei CDN-Links), damit ein ganz normaler Textlink, der zufällig mit http
 // anfängt, nicht versehentlich als Bild interpretiert wird.
@@ -1399,6 +1406,17 @@ function bildFehler(imgEl){
   imgEl.insertAdjacentElement('afterend', fehler);
 }
 
+// Gemeinsame Stelle für "ist es eine Bild-URL -> <img>, sonst normaler Text":
+// wird sowohl für Frage/Antwort als auch für die Zusatzseiten (seite3/seite4)
+// verwendet, damit Erkennung und Fehlerbehandlung (bildFehler) an nur einer
+// Stelle gepflegt werden müssen. textKlasse ist die CSS-Klasse für den
+// Text-Fall (z.B. "wort" auf Frage/Antwort, "notiz-text" auf den Zusatzseiten).
+function gibInhaltHTML(text, altText, textKlasse){
+  return istBildUrl(text)
+    ? `<img class="seite-bild" src="${text.replace(/"/g,'&quot;')}" alt="${altText}" loading="lazy" onerror="bildFehler(this)">`
+    : `<div class="${textKlasse}">${text}</div>`;
+}
+
 function gibFaceHTML(v, zustand){
   // Kleiner Hinweis oben rechts, dass es zu dieser Karte eine eigene Notiz gibt.
   // Nur auf front/back -- auf der Notiz-Seite selbst wäre er redundant.
@@ -1408,7 +1426,7 @@ function gibFaceHTML(v, zustand){
     return `<div class="face front">
       <div class="kategorie">${v.kat}</div>
       ${notizBadge}
-      <div class="wort">${v.frage}</div>
+      ${gibInhaltHTML(v.frage, 'Frage', 'wort')}
       <div class="hinweis">Antippen für die Antwort</div>
     </div>`;
   }
@@ -1420,7 +1438,7 @@ function gibFaceHTML(v, zustand){
     return `<div class="face back">
       <div class="kategorie">${v.kat}</div>
       ${notizBadge}
-      <div class="wort">${v.antwort}</div>
+      ${gibInhaltHTML(v.antwort, 'Antwort', 'wort')}
       ${naechsterHinweis}
     </div>`;
   }
@@ -1433,9 +1451,7 @@ function gibFaceHTML(v, zustand){
   const hinweis = gibtWeitere
     ? `<div class="hinweis" style="opacity:0.5">Antippen für ${seiten[zustand - 1].titel}</div>`
     : '';
-  const inhaltHTML = istBildUrl(seite.text)
-    ? `<img class="seite-bild" src="${seite.text.replace(/"/g,'&quot;')}" alt="${seite.titel}" loading="lazy" onerror="bildFehler(this)">`
-    : `<div class="notiz-text">${seite.text}</div>`;
+  const inhaltHTML = gibInhaltHTML(seite.text, seite.titel, 'notiz-text');
   return `<div class="face notiz">
     <div class="kategorie">${seite.titel}</div>
     ${inhaltHTML}
