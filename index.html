@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.13
+  SmartCards — Version 1.14
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -77,6 +77,22 @@
          Zustand, falls noch keine Datei geladen wurde. Nutzt dieselben
          Funktionen (zeigeDeckAuswahl/zeigeLeerenZustand) wie der bereits
          vorhandene Link "Deck wechseln".
+  v1.14 – Vier Änderungen: (1) Karten lassen sich jetzt zusätzlich zu den
+         Buttons auch per Wisch-Geste vor-/zurückblättern (Pointer Events auf
+         .card, siehe render()). (2) Neue Wiedervorlage-Funktion: Button
+         "★ Merken" (zwischen den dafür verkleinerten Zurück-/Weiter-Buttons)
+         legt die aktuelle Karte in einen deckübergreifenden
+         Wiedervorlage-Stapel (toggleMerken(), eigener Storage-Key
+         "wiedervorlage") -- erneutes Antippen entfernt sie wieder. Der
+         Stapel erscheint als eigene, farblich abgehobene Kachel (--bernstein)
+         oberhalb der normalen Decks auf der Deck-Auswahl und lässt sich wie
+         ein normales Deck lernen (waehleWiedervorlage()); dort entfernt der
+         Button die Karte direkt aus dem Stapel. (3) Der immer sichtbare Link
+         "SmartCards laden" ist raus -- stattdessen gibt es einen Button
+         "SmartCards laden" nur noch auf dem leeren Zustand ("Noch keine
+         Decks geladen"). (4) Der "N"-Badge oben rechts auf der Karte (Hinweis
+         auf Zusatzseiten) wurde entfernt (hatNotiz() war dadurch ungenutzt
+         und wurde mit entfernt).
 -->
 <html lang="de">
 <head>
@@ -97,6 +113,9 @@
     --mare: #2f6690;           /* Seeblau, starker Akzent (ehem. Terrakotta) */
     --cielo: #7fb2d6;          /* Himmelblau, ruhiger Kontrast (ehem. Salbeigrün) */
     --azzurro: #3f8fd1;        /* Azurblau, klarer Akzent (ehem. Senfgold) */
+    --bernstein: #d98e3b;      /* Bernstein/Amber, exklusiv für die Wiedervorlage-Funktion --
+                                  bewusst eine ganz eigene Farbe (nicht Blauton), damit sich
+                                  Wiedervorlage-Kachel und Merken-Button klar vom Rest abheben */
     --linea: rgba(23,50,79,0.14);
   }
 
@@ -189,6 +208,8 @@
     aspect-ratio: 4/5;
     max-height: 420px;
     cursor:pointer;
+    touch-action: pan-y;
+    user-select: none;
   }
 
   .face{
@@ -223,22 +244,6 @@
     letter-spacing:0.12em;
     text-transform:uppercase;
     opacity:0.5;
-  }
-
-  .notiz-badge{
-    position:absolute;
-    top:14px;
-    right:16px;
-    width:20px;
-    height:20px;
-    border-radius:50%;
-    background: var(--azzurro);
-    color: var(--inchiostro);
-    font-size:11px;
-    font-weight:700;
-    display:flex;
-    align-items:center;
-    justify-content:center;
   }
 
   .wort{
@@ -281,7 +286,7 @@
 
   .controls{
     display:flex;
-    gap:10px;
+    gap:8px;
     margin-top:22px;
   }
   button{
@@ -300,8 +305,30 @@
   }
   button:active{ transform: translate(2px,2px); box-shadow: 1px 1px 0 var(--inchiostro); }
 
+  .btn-zurueck, .btn-weiter{
+    font-size:13px;
+    padding:11px 0;
+  }
   .btn-zurueck{ background: #eaf5fb; }
   .btn-weiter{ background: var(--azzurro); color:#f8fbfe; }
+
+  /* Merken-Button: bewusst zwischen Zurück/Weiter, in der eigenen
+     Wiedervorlage-Akzentfarbe (--bernstein). Unmarkiert nur ein dezenter
+     Umriss ("★ Merken"), sobald die Karte im Stapel liegt (.aktiv) füllt
+     sich der Button komplett -- derselbe Zustand, den auch die
+     Wiedervorlage-Kachel auf der Deck-Auswahl signalisiert. */
+  .btn-merken{
+    font-size:13px;
+    padding:11px 4px;
+    background: rgba(217,142,59,0.14);
+    border-color: var(--bernstein);
+    color: var(--bernstein);
+  }
+  .btn-merken.aktiv{
+    background: var(--bernstein);
+    color: #fffaf3;
+  }
+
   button:disabled{ opacity:0.35; cursor:default; }
   button:disabled:active{ transform:none; box-shadow: 3px 3px 0 var(--inchiostro); }
 
@@ -599,18 +626,18 @@
   }
   .niveau-btn.eigene .label{ color: var(--azzurro); }
 
-  /* "SmartCards laden"-Link, immer zentriert unten, unabhängig vom Zustand */
-  .datei-laden-row{
-    text-align:center;
-    margin-top: 14px;
-    font-size:13px;
+  /* Wiedervorlage-Kachel: bewusst dieselbe Größe/Form wie eine echte
+     Deck-Kachel (es ist ja auch ein lernbarer Kartenstapel), aber in
+     --bernstein statt der sonst durchgängigen Blautöne -- das signalisiert
+     "besonderer Stapel", ohne wie ein zusätzliches Deck zu wirken. */
+  .niveau-btn.wiedervorlage{
+    background: rgba(217,142,59,0.14);
+    border-color: var(--bernstein);
+    box-shadow: 4px 4px 0 var(--bernstein);
   }
-  .datei-laden-row a{
-    color: var(--inchiostro);
-    opacity:0.55;
-    text-decoration: underline;
-    cursor:pointer;
-  }
+  .niveau-btn.wiedervorlage:active{ box-shadow: 2px 2px 0 var(--bernstein); }
+  .niveau-btn.wiedervorlage .label{ color: var(--bernstein); }
+
   .datei-laden-fehler{
     background: #e8f1f7;
     border: 1.5px solid var(--mare);
@@ -641,7 +668,6 @@
   <div class="stage" id="stage"></div>
 
   <div class="reset-row" id="resetRow"><a id="resetLink">Fortschritt zurücksetzen</a> · <a id="deckLink">Deck wechseln</a></div>
-  <div class="datei-laden-row"><a id="linkVokabelnLaden">SmartCards laden</a></div>
 </div>
 
 <script>
@@ -650,7 +676,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.13';
+const APP_VERSION = '1.14';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -663,12 +689,6 @@ function extraSeiten(v){
   if(v.seite3) seiten.push({ titel: 'Seite 3', text: v.seite3 });
   if(v.seite4) seiten.push({ titel: 'Seite 4', text: v.seite4 });
   return seiten;
-}
-
-// Gibt es für diese Karte überhaupt eine Extra-Seite? Für den kleinen Badge oben
-// rechts auf front/back, der andeutet "hier kommt noch mehr".
-function hatNotiz(v){
-  return extraSeiten(v).length > 0;
 }
 
 // Höchster erreichbarer zustand-Wert für eine Karte. Reihenfolge ist immer
@@ -694,13 +714,26 @@ let DECK_NAME = null;     // Name des aktuell gewählten Arbeitsblatts/Decks
 let SORTIERT = true;      // true = Reihenfolge wie in der xlsx | false = gemischt
 let STUNDENPLAN = null;   // Rohe Zeilen des Arbeitsblatts "Stundenplan" (falls vorhanden), sonst null
 
-// Baut VOKABELN aus dem aktuellen Deck neu auf, abhängig von SORTIERT.
+// Wiedervorlage: eigener "Stapel" aus Karten, die über den Merken-Button auf
+// der Karteikarte markiert wurden -- deckübergreifend, unabhängig vom gerade
+// gewählten Deck. Jeder Eintrag ist eine Kopie der Original-Karte plus dem
+// Feld _herkunft (Name des Ursprungs-Decks), damit sich beim Merken/Entmerken
+// dieselbe Karte im Ursprungsdeck wiederfinden lässt (siehe istInWiedervorlage).
+let WIEDERVORLAGE = [];
+const WIEDERVORLAGE_NAME = 'Wiedervorlage';
+let WIEDERVORLAGE_MODUS = false;  // true, während der Wiedervorlage-Stapel selbst gelernt wird
+
+// Baut VOKABELN aus dem aktuellen Deck neu auf, abhängig von SORTIERT. Im
+// Wiedervorlage-Modus ist die "Quelle" WIEDERVORLAGE statt eines normalen
+// Decks aus AKTIVE_DATEI -- sonst identische Logik.
 // .slice() bei sortiert wichtig: liefert eine Kopie, damit VOKABELN nie auf
-// dasselbe Array-Objekt wie AKTIVE_DATEI[DECK_NAME] zeigt -- sonst würde
-// spätere Bearbeitung von VOKABELN (aktuell passiert das nirgends, aber sicher
-// ist sicher) versehentlich auch die Originaldaten verändern.
+// dasselbe Array-Objekt wie die Quelle zeigt -- sonst würde spätere
+// Bearbeitung von VOKABELN (z.B. das Entfernen einer Karte beim Entmerken im
+// Wiedervorlage-Modus) versehentlich auch die Quelle direkt verändern, ohne
+// dass wir das kontrollieren.
 function vokabelnNeuLaden(){
-  return SORTIERT ? AKTIVE_DATEI[DECK_NAME].slice() : mische(AKTIVE_DATEI[DECK_NAME]);
+  const quelle = WIEDERVORLAGE_MODUS ? WIEDERVORLAGE : AKTIVE_DATEI[DECK_NAME];
+  return SORTIERT ? quelle.slice() : mische(quelle);
 }
 let VOKABELN = [];
 let idx = 0;
@@ -757,6 +790,21 @@ async function ladeDatei(){
 // Storage-Key statt zwei getrennter, das spart einen Roundtrip beim Laden.
 async function speichereDatei(decks, stundenplan){
   try{ await window.storage.set('vocab-datei', JSON.stringify({ decks, stundenplan })); }catch(e){}
+}
+
+// ---------- Persistenz: Wiedervorlage-Stapel ----------
+// Eigener Storage-Key, unabhängig von 'vocab-datei' -- die Wiedervorlage
+// wächst laufend während des Lernens und soll nicht bei jedem Deck-Wechsel
+// mit gespeichert/gelesen werden müssen.
+async function ladeWiedervorlage(){
+  try{
+    const res = await window.storage.get('wiedervorlage');
+    if(res && res.value) return JSON.parse(res.value);
+  }catch(e){}
+  return [];
+}
+async function speichereWiedervorlage(){
+  try{ await window.storage.set('wiedervorlage', JSON.stringify(WIEDERVORLAGE)); }catch(e){}
 }
 
 // Eigener Bestätigungs-Dialog als Ersatz für window.confirm() -- siehe
@@ -825,13 +873,18 @@ async function setzeAppKomplettZurueck(){
 
 // Alte Fortschritts-Einträge löschen, wenn eine neue Datei hochgeladen wird —
 // sonst würde z.B. der Kartenindex eines alten Decks auf ein Deck mit anderem
-// Inhalt, aber gleichem Blattnamen, angewendet.
+// Inhalt, aber gleichem Blattnamen, angewendet. Die Wiedervorlage wird hier
+// bewusst mit zurückgesetzt: ihre Einträge sind Kopien von Karten aus der
+// bisherigen Datei -- mit einer neuen Datei (oder nach einem Komplett-Reset)
+// wären das Karteileichen ohne Bezug zu den dann aktiven Decks.
 async function loescheAltenFortschritt(){
   try{
     const liste = await window.storage.list('vocab-progress-');
     if(liste && liste.keys){
       for(const k of liste.keys){ await window.storage.delete(k); }
     }
+    WIEDERVORLAGE = [];
+    await window.storage.delete('wiedervorlage');
   }catch(e){}
 }
 
@@ -874,8 +927,12 @@ function zeigeLeerenZustand(){
   stage.innerHTML = `
     <div class="niveau-screen">
       <div class="niveau-frage">Noch keine Decks geladen</div>
+      <div style="margin-top:8px; width:100%; max-width:280px;">
+        <button id="btnLeererZustandLaden" style="box-shadow:3px 3px 0 var(--inchiostro);">SmartCards laden</button>
+      </div>
     </div>
   `;
+  document.getElementById('btnLeererZustandLaden').onclick = () => zeigeLadenAuswahl();
 }
 
 function zeigeDeckAuswahl(){
@@ -899,11 +956,22 @@ function zeigeDeckAuswahl(){
     <div class="stundenplan-kachel" id="btnStundenplan">📅 Stundenplan</div>
   ` : '';
 
+  // Wiedervorlage-Kachel: nur sichtbar, wenn tatsächlich Karten gemerkt wurden
+  // (siehe toggleMerken). Erscheint bewusst über den normalen Deck-Kacheln
+  // (erstes Element in .niveau-optionen) und in der eigenen Akzentfarbe
+  // --bernstein, damit sie sich klar von den gleichwertigen Decks abhebt.
+  const wiedervorlageKachel = WIEDERVORLAGE.length > 0 ? `
+    <div class="niveau-btn wiedervorlage" id="btnWiedervorlage">
+      <span class="label">⭐ ${WIEDERVORLAGE_NAME}</span>
+      <span class="desc">${WIEDERVORLAGE.length} gemerkte Karte${WIEDERVORLAGE.length === 1 ? '' : 'n'}</span>
+    </div>
+  ` : '';
+
   stage.innerHTML = `
     <div class="niveau-screen">
       ${stundenplanKachel}
       <div class="niveau-frage">Welches Deck möchtest du lernen?</div>
-      <div class="niveau-optionen">${kacheln}</div>
+      <div class="niveau-optionen">${wiedervorlageKachel}${kacheln}</div>
       <div class="niveau-wechsel"><a id="btnAppZuruecksetzen">Decks zurücksetzen</a></div>
     </div>
   `;
@@ -911,6 +979,10 @@ function zeigeDeckAuswahl(){
   stage.querySelectorAll('[data-deck]').forEach(el => {
     el.onclick = () => waehleDeck(el.getAttribute('data-deck'));
   });
+
+  if(WIEDERVORLAGE.length > 0){
+    document.getElementById('btnWiedervorlage').onclick = () => waehleWiedervorlage();
+  }
 
   document.getElementById('btnAppZuruecksetzen').onclick = () => setzeAppKomplettZurueck();
 
@@ -1354,8 +1426,26 @@ async function ladeDeckDateiVonGithub(dateiname){
 }
 
 async function waehleDeck(name){
+  WIEDERVORLAGE_MODUS = false;
   DECK_NAME = name;
   await ladeFortschritt(name);
+  untertitelText.textContent = `Deck · ${DECK_NAME}`;
+  zeigeSortierAuswahl();
+}
+
+// Öffnet den Wiedervorlage-Stapel wie ein ganz normales Deck (gleicher
+// Sortiert/Gemischt-Zwischenschritt, gleiche Kartenansicht) -- einziger
+// Unterschied ist WIEDERVORLAGE_MODUS = true, wodurch vokabelnNeuLaden()
+// WIEDERVORLAGE statt eines Decks aus AKTIVE_DATEI als Quelle nimmt.
+// Nutzt DECK_NAME = WIEDERVORLAGE_NAME auch als Fortschritts-Storage-Key --
+// exakt dasselbe Muster wie bei einem normalen Deck. Einzige (bewusst in
+// Kauf genommene) Einschränkung: hieße eines der echten Decks in der xlsx
+// zufällig ebenfalls "Wiedervorlage", würden sich beide denselben
+// Fortschritts-Eintrag teilen.
+async function waehleWiedervorlage(){
+  WIEDERVORLAGE_MODUS = true;
+  DECK_NAME = WIEDERVORLAGE_NAME;
+  await ladeFortschritt(DECK_NAME);
   untertitelText.textContent = `Deck · ${DECK_NAME}`;
   zeigeSortierAuswahl();
 }
@@ -1424,14 +1514,9 @@ function gibInhaltHTML(text, altText, textKlasse){
 }
 
 function gibFaceHTML(v, zustand){
-  // Kleiner Hinweis oben rechts, dass es zu dieser Karte eine eigene Notiz gibt.
-  // Nur auf front/back -- auf der Notiz-Seite selbst wäre er redundant.
-  const notizBadge = hatNotiz(v) ? '<div class="notiz-badge">N</div>' : '';
-
   if(zustand === 0){
     return `<div class="face front">
       <div class="kategorie">${v.kat}</div>
-      ${notizBadge}
       ${gibInhaltHTML(v.frage, 'Frage', 'wort')}
       <div class="hinweis">Antippen für die Antwort</div>
     </div>`;
@@ -1443,7 +1528,6 @@ function gibFaceHTML(v, zustand){
       : '';
     return `<div class="face back">
       <div class="kategorie">${v.kat}</div>
-      ${notizBadge}
       ${gibInhaltHTML(v.antwort, 'Antwort', 'wort')}
       ${naechsterHinweis}
     </div>`;
@@ -1482,6 +1566,13 @@ function render(){
   const v = VOKABELN[idx];
   zustand = 0;
 
+  // Beschriftung/Optik des Merken-Buttons hängt vom Zustand der aktuellen
+  // Karte ab: im Wiedervorlage-Modus ist es immer "Entfernen" (Karte fliegt
+  // direkt aus dem Stapel), sonst "Merken" bzw. "Gemerkt", je nachdem, ob die
+  // Karte schon im Stapel liegt (siehe istInWiedervorlage).
+  const gemerkt = WIEDERVORLAGE_MODUS || istInWiedervorlage(v);
+  const merkenLabel = WIEDERVORLAGE_MODUS ? '✕ Entfernen' : (gemerkt ? '✓ Gemerkt' : '★ Merken');
+
   stage.innerHTML = `
     <div class="deck-label">${idx+1} / ${VOKABELN.length} · ${DECK_NAME}</div>
     <div class="card" id="karte">
@@ -1489,12 +1580,18 @@ function render(){
     </div>
     <div class="controls">
       <button class="btn-zurueck" id="btnZurueckKarte" ${idx === 0 ? 'disabled' : ''}>← Zurück</button>
+      <button class="btn-merken ${gemerkt ? 'aktiv' : ''}" id="btnMerken">${merkenLabel}</button>
       <button class="btn-weiter" id="btnWeiter">Weiter →</button>
     </div>
   `;
 
   const karte = document.getElementById('karte');
-  karte.onclick = () => {
+
+  // Karte umdrehen/weiterblättern durch die Zusatzseiten -- dieselbe Logik,
+  // die vorher direkt in karte.onclick stand, jetzt als eigene Funktion,
+  // damit sowohl ein normaler Tap (kein nennenswertes Wischen) als auch das
+  // Ende einer Wisch-Geste ohne Richtung sie gleichermaßen auslösen können.
+  const umdrehen = () => {
     const maxZustand = maxZustandFuer(v);
     zustand = (zustand + 1) > maxZustand ? 0 : zustand + 1;
     karte.innerHTML = gibFaceHTML(v, zustand);
@@ -1503,8 +1600,79 @@ function render(){
     requestAnimationFrame(() => faceEl.classList.remove('eintretend'));
   };
 
+  // Wisch-Geste: zusätzlich zu den Buttons soll man auch über die Karte
+  // wischen können, um vor/zurück zu blättern. Pointer Events (statt separater
+  // touch-/mouse-Handler) funktionieren einheitlich für Finger UND Maus.
+  // Unterscheidung Tap vs. Wisch: erst bei pointerup wird anhand der
+  // zurückgelegten Strecke entschieden -- unter der Schwelle (oder wenn die
+  // Bewegung eher senkrecht als waagerecht war) zählt es als Tap und dreht
+  // die Karte um, wie bisher. Darüber zählt es als Wisch und blättert die
+  // ganze Karte weiter/zurück, OHNE sie zusätzlich umzudrehen.
+  const SCHWELLE = 50;
+  let startX = null, startY = null;
+  karte.addEventListener('pointerdown', e => {
+    startX = e.clientX;
+    startY = e.clientY;
+    // Capture sorgt dafür, dass pointerup/pointermove weiter bei "karte"
+    // ankommen, auch wenn der Finger die Karte während des Wischens verlässt --
+    // ohne das würde ein schnelles Wischen über den Kartenrand hinaus sonst
+    // manchmal gar kein pointerup-Event mehr auf der Karte auslösen.
+    try{ karte.setPointerCapture(e.pointerId); }catch(err){}
+  });
+  karte.addEventListener('pointerup', e => {
+    if(startX === null) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    startX = null; startY = null;
+    if(Math.abs(dx) > SCHWELLE && Math.abs(dx) > Math.abs(dy)){
+      if(dx < 0) weiter(); else vorherige();
+    } else {
+      umdrehen();
+    }
+  });
+  karte.addEventListener('pointercancel', () => { startX = null; startY = null; });
+
   document.getElementById('btnWeiter').onclick = (e) => { e.stopPropagation(); weiter(); };
   document.getElementById('btnZurueckKarte').onclick = (e) => { e.stopPropagation(); vorherige(); };
+  document.getElementById('btnMerken').onclick = (e) => { e.stopPropagation(); toggleMerken(); };
+}
+
+// Ist die übergebene Karte gerade im Wiedervorlage-Stapel? Vergleich über
+// Herkunfts-Deck + frage/antwort statt Objekt-Referenz, weil WIEDERVORLAGE
+// nach einem Neuladen der Seite aus JSON rekonstruiert wird und dann keine
+// gemeinsamen Objekt-Referenzen mit AKTIVE_DATEI mehr hat.
+function istInWiedervorlage(v){
+  return WIEDERVORLAGE.some(x => x._herkunft === DECK_NAME && x.frage === v.frage && x.antwort === v.antwort);
+}
+
+// Merken-Button: fügt die aktuelle Karte der Wiedervorlage hinzu, entfernt sie
+// wieder (Umschalter) oder wirft sie direkt aus dem Stapel, wenn man gerade
+// den Wiedervorlage-Stapel selbst lernt.
+async function toggleMerken(){
+  const v = VOKABELN[idx];
+
+  if(WIEDERVORLAGE_MODUS){
+    // Wir befinden uns bereits im Stapel -- "Entfernen" nimmt die Karte direkt
+    // sowohl aus WIEDERVORLAGE als auch aus der laufenden Lernsitzung (VOKABELN)
+    // heraus, damit sie nicht gleich danach nochmal auftaucht.
+    const posWieder = WIEDERVORLAGE.indexOf(v);
+    if(posWieder !== -1) WIEDERVORLAGE.splice(posWieder, 1);
+    const posVokabeln = VOKABELN.indexOf(v);
+    if(posVokabeln !== -1) VOKABELN.splice(posVokabeln, 1);
+    await speichereWiedervorlage();
+    await speichereFortschritt();
+    render();
+    return;
+  }
+
+  const pos = WIEDERVORLAGE.findIndex(x => x._herkunft === DECK_NAME && x.frage === v.frage && x.antwort === v.antwort);
+  if(pos !== -1){
+    WIEDERVORLAGE.splice(pos, 1);
+  } else {
+    WIEDERVORLAGE.push({ ...v, _herkunft: DECK_NAME });
+  }
+  await speichereWiedervorlage();
+  render();
 }
 
 function weiter(){
@@ -1548,13 +1716,10 @@ document.getElementById('titelHome').onclick = () => {
   if(AKTIVE_DATEI) zeigeDeckAuswahl(); else zeigeLeerenZustand();
 };
 
-document.getElementById('linkVokabelnLaden').onclick = () => {
-  zeigeLadenAuswahl();
-};
-
 (async function init(){
   statsRow.style.display = 'none';
   resetRow.style.display = 'none';
+  WIEDERVORLAGE = await ladeWiedervorlage();
   const gespeichert = await ladeDatei();
   const decks = gespeichert && gespeichert.decks;
   if(decks && Object.keys(decks).length > 0){
