@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.20
+  SmartCards — Version 1.22
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -145,6 +145,32 @@
          38px, dünnerer Rahmen (1px statt 1.5px), flacherer Schatten,
          zusätzlich mit opacity:0.6 abgeschwächt (bei :hover kurz auf 0.9,
          damit er beim Antippen trotzdem gut erkennbar bleibt).
+  v1.21 – Neue Funktion "Prüfpfad": optionale Antwort-Abfrage per Zahlen-
+         Tastatur, individuell pro Deck über ein neues Arbeitsblatt "config"
+         in der xlsx (Spalte "Deck mit Abfrage", siehe lesePruefpfadConfig(),
+         PRUEFPFAD_DECKS). Nur für dort gelistete Decks erscheint auf der
+         Sortier-Auswahl ein Ein/Aus-Schalter "Prüfung" (nie im
+         Wiedervorlage-Modus, da dort Karten aus verschiedenen Decks gemischt
+         sein können). Bei eingeschaltetem Prüfpfad wird die Karte etwas
+         kleiner, darunter erscheinen ein Eingabefeld und eine eigene
+         Zahlen-Tastatur mit Enter-Taste (pruefpfadTaste(), pruefeAntwort()).
+         Die Eingabe färbt das Feld bei Enter grün (richtig) oder rot
+         (falsch) ein. Die Karte lässt sich erst wenden, nachdem für sie
+         mindestens einmal geprüft wurde (PRUEFPFAD_GEPRUEFT) -- das Prüfen
+         selbst dreht sie nicht automatisch um, das bleibt ein separater
+         Klick/Tap. deckAusWorkbook()/speichereDatei()/ladeDatei() um die
+         Prüfpfad-Deckliste erweitert, damit sie auch nach einem Reload
+         erhalten bleibt.
+  v1.22 – Bugfix Prüfpfad: Eingabefeld färbte sich bei richtig/falsch nicht
+         sichtbar ein. Ursache: "richtig" nutzte var(--azzurro) und "falsch"
+         var(--mare) -- beides Theme-Farben, die je nach Farbschema selbst
+         blau sind (im Blau-Schema z.B. dieselbe Farbe wie die jetzt blaue
+         Frageseite darüber, siehe v1.17), dadurch fiel die Einfärbung kaum
+         auf. Neue, in JEDEM Farbschema identische Konstanten --richtig-farbe
+         (#2e8b57) und --falsch-farbe (#c23b3b) ergänzt -- wie --bernstein
+         bewusst nicht Teil der [data-theme]-Blöcke, damit "richtig"/"falsch"
+         immer wie eine echte Ampelfarbe aussieht, unabhängig vom gewählten
+         Farbschema.
 -->
 <html lang="de" data-theme="blau">
 <head>
@@ -186,6 +212,14 @@
     --bernstein: #d98e3b;
     --bernstein-rgb: 217,142,59;
     --bernstein-text: #fffaf3;  /* warmes Off-White, passend zu --bernstein, ebenfalls konstant */
+
+    /* Prüfpfad-Feedback: bewusst wie --bernstein in JEDEM Farbschema
+       IDENTISCH. "Richtig"/"Falsch" muss wie eine echte Ampelfarbe aussehen
+       -- var(--azzurro)/var(--mare) hätten z.B. im Blau-Schema beide selbst
+       blau ausgesehen und sich kaum vom Rest der (dann auch blauen)
+       Frageseite abgehoben. */
+    --richtig-farbe: #2e8b57;
+    --falsch-farbe: #c23b3b;
 
     /* Ab hier: Werte, die sich aus den Variablen oben herleiten (Transparenz-
        Effekte). Diese hier NUR EINMAL definieren, NICHT pro Farbschema --
@@ -346,6 +380,9 @@
     touch-action: pan-y;
     user-select: none;
   }
+  /* Bei aktivem Prüfpfad etwas kleiner, damit Eingabefeld + Zahlen-Tastatur
+     darunter ohne Scrollen Platz haben. */
+  .card.pruefpfad-modus{ max-height: 300px; }
 
   .face{
     position:absolute;
@@ -419,6 +456,48 @@
     opacity:0.7;
     max-width:90%;
   }
+
+  /* Prüfpfad: Eingabefeld + Zahlen-Tastatur unterhalb der (dann verkleinerten)
+     Karte. Eigener Block, bewusst zwischen .card und .controls platziert --
+     unabhängig von der Karte, damit ein Kartenwenden ihn nicht mit neu
+     aufbaut (siehe umdrehen() in render(), das ihn nur ein-/ausblendet). */
+  .pruefpfad-bereich{
+    margin-top:14px;
+  }
+  .pruefpfad-eingabe{
+    width:100%;
+    box-sizing:border-box;
+    text-align:center;
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:22px;
+    padding:10px;
+    border-radius:12px;
+    border: 1.5px solid var(--inchiostro);
+    background: var(--flaeche);
+    color: var(--inchiostro);
+    margin-bottom:10px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  /* Kein Blink-Cursor auf einem readonly-Feld, das ohnehin nur über die
+     eigene Tastatur befüllt wird -- wirkt sonst wie ein Eingabefeld, das auf
+     die (hier absichtlich nicht erscheinende) System-Tastatur wartet. */
+  .pruefpfad-eingabe:focus{ outline: none; }
+  .pruefpfad-eingabe.richtig{ background: var(--richtig-farbe); color: #fdfdfd; border-color: var(--richtig-farbe); }
+  .pruefpfad-eingabe.falsch{ background: var(--falsch-farbe); color: #fdfdfd; border-color: var(--falsch-farbe); }
+
+  .zahlen-tastatur{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap:8px;
+  }
+  .zahlen-tastatur button{
+    flex:none;
+    padding:14px 0;
+    font-size:18px;
+  }
+  .zahlen-tastatur .taste-enter{ background: var(--azzurro); color: var(--flaeche); }
+  .zahlen-tastatur .taste-loeschen{ background: var(--flaeche-alt); }
 
   .controls{
     display:flex;
@@ -559,6 +638,57 @@
   .niveau-btn.liste .label{
     font-size:15px;
     color: var(--mare);
+  }
+
+  /* Prüfung-An/Aus-Schalter unterhalb des Liste-Buttons. Eigene, kompakte
+     Zeile statt einer weiteren .niveau-btn-Kachel -- ein Ein/Aus-Zustand ist
+     kein gleichwertiger dritter Lernmodus, sondern eine kleine Zusatzoption. */
+  .pruefpfad-zeile{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:10px;
+    margin-top:6px;
+    font-size:14px;
+    color: var(--inchiostro);
+  }
+  .schalter{
+    position:relative;
+    display:inline-block;
+    width:42px;
+    height:24px;
+    flex:none;
+  }
+  .schalter input{
+    opacity:0;
+    width:0;
+    height:0;
+    position:absolute;
+  }
+  .schalter-slider{
+    position:absolute;
+    inset:0;
+    background: var(--flaeche-alt);
+    border: 1.5px solid var(--inchiostro);
+    border-radius:999px;
+    cursor:pointer;
+    transition: background 0.15s ease;
+  }
+  .schalter-slider::before{
+    content:"";
+    position:absolute;
+    width:16px;
+    height:16px;
+    left:2px;
+    top:2px;
+    background: var(--inchiostro);
+    border-radius:50%;
+    transition: transform 0.15s ease;
+  }
+  .schalter input:checked + .schalter-slider{ background: var(--azzurro); }
+  .schalter input:checked + .schalter-slider::before{
+    transform: translateX(18px);
+    background: var(--flaeche);
   }
 
   /* Tabellenansicht (Liste) */
@@ -856,7 +986,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.20';
+const APP_VERSION = '1.22';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -893,6 +1023,15 @@ let AKTIVE_DATEI = null;  // { blattname: [ {frage,antwort,kat,seite3,seite4}, .
 let DECK_NAME = null;     // Name des aktuell gewählten Arbeitsblatts/Decks
 let SORTIERT = true;      // true = Reihenfolge wie in der xlsx | false = gemischt
 let STUNDENPLAN = null;   // Rohe Zeilen des Arbeitsblatts "Stundenplan" (falls vorhanden), sonst null
+
+// Prüfpfad: Namen der Decks (Arbeitsblätter), für die laut Arbeitsblatt
+// "config" (Spalte "Deck mit Abfrage") eine Antwort-Abfrage angeboten werden
+// soll. Decks, die dort nicht aufgeführt sind, bleiben unverändert -- kein
+// Umschalter auf der Sortier-Auswahl.
+let PRUEFPFAD_DECKS = [];
+let PRUEFPFAD_AKTIV = false;     // für die aktuelle Lernsitzung ein-/ausgeschaltet (nicht gespeichert)
+let PRUEFPFAD_GEPRUEFT = false;  // true, sobald für die aktuelle Karte mindestens einmal geprüft wurde
+let PRUEFPFAD_EINGABE = '';      // aktuell über die Zahlen-Tastatur eingetippter Text
 
 // Wiedervorlage: eigener "Stapel" aus Karten, die über den Merken-Button auf
 // der Karteikarte markiert wurden -- deckübergreifend, unabhängig vom gerade
@@ -966,8 +1105,8 @@ async function ladeDatei(){
 // decks und stundenplan kommen immer zusammen aus derselben xlsx und werden
 // auch immer zusammen gebraucht (siehe init()) -- deshalb ein gemeinsamer
 // Storage-Key statt zwei getrennter, das spart einen Roundtrip beim Laden.
-async function speichereDatei(decks, stundenplan){
-  try{ await window.storage.set('vocab-datei', JSON.stringify({ decks, stundenplan })); }catch(e){}
+async function speichereDatei(decks, stundenplan, pruefpfadDecks){
+  try{ await window.storage.set('vocab-datei', JSON.stringify({ decks, stundenplan, pruefpfadDecks })); }catch(e){}
 }
 
 // ---------- Persistenz: Wiedervorlage-Stapel ----------
@@ -1291,14 +1430,15 @@ function renderVordefinierteSets(eintraege){
       const textVorher = labelEl.textContent;
       labelEl.textContent = 'Lädt …';
       try{
-        const { decks, stundenplan } = await ladeDeckDateiVonGithub(eintrag.dateiname);
+        const { decks, stundenplan, pruefpfadDecks } = await ladeDeckDateiVonGithub(eintrag.dateiname);
         if(Object.keys(decks).length === 0 && !stundenplan){
           throw new Error('Datei gefunden, aber keine gültigen Arbeitsblätter darin.');
         }
         await raeumeBeimDateiwechselAuf();
-        await speichereDatei(decks, stundenplan);
+        await speichereDatei(decks, stundenplan, pruefpfadDecks);
         AKTIVE_DATEI = decks;
         STUNDENPLAN = stundenplan;
+        PRUEFPFAD_DECKS = pruefpfadDecks || [];
         zeigeDeckAuswahl();
       } catch(err){
         labelEl.textContent = textVorher;
@@ -1323,7 +1463,8 @@ function zeigeUploadScreen(){
       <div class="upload-info">
         Benötigte Spalten: <strong>frage</strong> (Vorderseite) · <strong>antwort</strong> (Rückseite)<br>
         Optional: <strong>kat</strong> (Kategorie) · <strong>seite3</strong>, <strong>seite4</strong> (eigene Zusatzseiten, jede auf einer eigenen Kartenseite -- eine Bild-URL statt Text zeigt dort das Bild).<br>
-        Ein Arbeitsblatt namens <strong>Stundenplan</strong> wird nicht als Deck behandelt, sondern als eigene Stundenplan-Ansicht angezeigt.
+        Ein Arbeitsblatt namens <strong>Stundenplan</strong> wird nicht als Deck behandelt, sondern als eigene Stundenplan-Ansicht angezeigt.<br>
+        Ein Arbeitsblatt namens <strong>config</strong> wird ebenfalls nicht als Deck behandelt: Spalte <strong>Deck mit Abfrage</strong> listet die Decks, für die auf der Sortier-Auswahl ein Prüfung-Schalter erscheinen soll.
       </div>
       <div style="margin-top:16px;">
         <button id="btnZurueck" style="box-shadow:3px 3px 0 var(--inchiostro); font-size:13px; padding:10px 0;">← Abbrechen</button>
@@ -1366,9 +1507,9 @@ async function verarbeiteDatei(file){
     return;
   }
 
-  let decks, stundenplan;
+  let decks, stundenplan, pruefpfadDecks;
   try{
-    ({ decks, stundenplan } = await leseXLSXDatei(file));
+    ({ decks, stundenplan, pruefpfadDecks } = await leseXLSXDatei(file));
   } catch(e){
     zeigeUploadFehler('Fehler beim Lesen der Datei: ' + e.message);
     return;
@@ -1381,9 +1522,10 @@ async function verarbeiteDatei(file){
   }
 
   await raeumeBeimDateiwechselAuf();
-  await speichereDatei(decks, stundenplan);
+  await speichereDatei(decks, stundenplan, pruefpfadDecks);
   AKTIVE_DATEI = decks;
   STUNDENPLAN = stundenplan;
+  PRUEFPFAD_DECKS = pruefpfadDecks || [];
   zeigeDeckAuswahl();
 }
 
@@ -1508,23 +1650,42 @@ function leseStundenplan(ws){
   return zeilen;
 }
 
+// Liest das Arbeitsblatt "config": Spalte "Deck mit Abfrage" listet die Namen
+// der Decks (Arbeitsblätter), für die der Prüfpfad angeboten werden soll.
+// Groß-/Kleinschreibung und Leerzeichen am Rand werden ignoriert, damit ein
+// Tippfehler bei der Schreibweise nicht gleich zum stillen Nichtfunktionieren
+// führt -- der Vergleich in zeigeSortierAuswahl() normalisiert genauso.
+function lesePruefpfadConfig(ws){
+  const zeilen = XLSX.utils.sheet_to_json(ws, {defval:''});
+  return zeilen
+    .map(z => String(z['Deck mit Abfrage'] || '').trim())
+    .filter(name => name !== '');
+}
+
 // Gemeinsame Kernlogik: fertiges Workbook (von XLSX.read()) -> Deck-Struktur.
 // Ein Arbeitsblatt namens genau "Stundenplan" wird nicht als Lern-Deck
-// behandelt, sondern separat als Rohraster für die Stundenplan-Ansicht.
+// behandelt, sondern separat als Rohraster für die Stundenplan-Ansicht. Ein
+// Arbeitsblatt namens genau "config" wird ebenfalls nicht als Deck behandelt,
+// sondern liefert die Prüfpfad-Deckliste (siehe lesePruefpfadConfig).
 function deckAusWorkbook(wb){
   const decks = {};
   let stundenplan = null;
+  let pruefpfadDecks = [];
   for(const blattname of wb.SheetNames){
     const ws = wb.Sheets[blattname];
     if(blattname === 'Stundenplan'){
       stundenplan = leseStundenplan(ws);
       continue;
     }
+    if(blattname === 'config'){
+      pruefpfadDecks = lesePruefpfadConfig(ws);
+      continue;
+    }
     const zeilen = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
     const eintraege = parseSheet(zeilen);
     if(eintraege.length > 0) decks[blattname] = eintraege;
   }
-  return { decks, stundenplan };
+  return { decks, stundenplan, pruefpfadDecks };
 }
 
 function leseXLSXDatei(file){
@@ -1604,6 +1765,7 @@ async function waehleDeck(name){
   WIEDERVORLAGE_MODUS = false;
   DECK_NAME = name;
   idx = 0;
+  PRUEFPFAD_AKTIV = false;
   untertitelText.textContent = `Deck · ${DECK_NAME}`;
   zeigeSortierAuswahl();
 }
@@ -1616,11 +1778,29 @@ async function waehleWiedervorlage(){
   WIEDERVORLAGE_MODUS = true;
   DECK_NAME = WIEDERVORLAGE_NAME;
   idx = 0;
+  PRUEFPFAD_AKTIV = false;
   untertitelText.textContent = `Deck · ${DECK_NAME}`;
   zeigeSortierAuswahl();
 }
 
 function zeigeSortierAuswahl(){
+  // Prüfpfad nur anbieten, wenn dieses Deck laut Arbeitsblatt "config" (Spalte
+  // "Deck mit Abfrage") dafür vorgesehen ist -- und nie im Wiedervorlage-
+  // Modus, da dort Karten aus verschiedenen Decks gemischt sein können und
+  // nicht jede davon zwingend zu einem Prüfpfad-Deck gehört.
+  const pruefpfadVerfuegbar = !WIEDERVORLAGE_MODUS &&
+    PRUEFPFAD_DECKS.some(name => name.toLowerCase() === DECK_NAME.toLowerCase());
+
+  const pruefpfadZeile = pruefpfadVerfuegbar ? `
+    <div class="pruefpfad-zeile" id="pruefpfadZeile">
+      <span>Prüfung</span>
+      <label class="schalter">
+        <input type="checkbox" id="pruefpfadSchalter">
+        <span class="schalter-slider"></span>
+      </label>
+    </div>
+  ` : '';
+
   stage.innerHTML = `
     <div class="niveau-screen">
       <div class="niveau-frage">Sortiert oder gemischt lernen?</div>
@@ -1636,6 +1816,7 @@ function zeigeSortierAuswahl(){
         <div class="niveau-btn liste" id="btnListe">
           <span class="label">Liste</span>
         </div>
+        ${pruefpfadZeile}
       </div>
     </div>
   `;
@@ -1684,6 +1865,8 @@ function zeigeListenAnsicht(){
 function waehleSortierung(sortiert){
   SORTIERT = sortiert;
   VOKABELN = vokabelnNeuLaden();
+  const schalter = document.getElementById('pruefpfadSchalter');
+  PRUEFPFAD_AKTIV = schalter ? schalter.checked : false;
   deckWechselRow.style.display = 'block';
   render();
 }
@@ -1773,6 +1956,8 @@ function render(){
 
   const v = VOKABELN[idx];
   zustand = 0;
+  PRUEFPFAD_GEPRUEFT = false;
+  PRUEFPFAD_EINGABE = '';
 
   // Beschriftung/Optik des Merken-Buttons hängt vom Zustand der aktuellen
   // Karte ab: im Wiedervorlage-Modus ist es immer "Entfernen" (Karte fliegt
@@ -1781,11 +1966,38 @@ function render(){
   const gemerkt = WIEDERVORLAGE_MODUS || istInWiedervorlage(v);
   const merkenLabel = WIEDERVORLAGE_MODUS ? '✕ Entfernen' : (gemerkt ? '✓ Gemerkt' : '★ Merken');
 
+  // Prüfpfad-Bereich (Eingabefeld + Zahlen-Tastatur) nur, wenn für diese
+  // Lernsitzung eingeschaltet (siehe waehleSortierung). Liegt direkt unter
+  // der Karte, nicht darin -- die Karte selbst wird beim Wenden komplett neu
+  // aufgebaut (karte.innerHTML = ...), der Prüfpfad-Bereich soll davon aber
+  // unberührt bleiben (siehe umdrehen() weiter unten, das ihn nur ein-/
+  // ausblendet statt neu zu erzeugen).
+  const pruefpfadHTML = PRUEFPFAD_AKTIV ? `
+    <div class="pruefpfad-bereich" id="pruefpfadBereich">
+      <input type="text" id="pruefpfadEingabe" class="pruefpfad-eingabe" readonly inputmode="none" aria-label="Deine Antwort">
+      <div class="zahlen-tastatur" id="zahlenTastatur">
+        <button type="button" data-taste="1">1</button>
+        <button type="button" data-taste="2">2</button>
+        <button type="button" data-taste="3">3</button>
+        <button type="button" data-taste="4">4</button>
+        <button type="button" data-taste="5">5</button>
+        <button type="button" data-taste="6">6</button>
+        <button type="button" data-taste="7">7</button>
+        <button type="button" data-taste="8">8</button>
+        <button type="button" data-taste="9">9</button>
+        <button type="button" class="taste-loeschen" data-taste="loeschen">⌫</button>
+        <button type="button" data-taste="0">0</button>
+        <button type="button" class="taste-enter" data-taste="enter">↵</button>
+      </div>
+    </div>
+  ` : '';
+
   stage.innerHTML = `
     <div class="deck-label">${idx+1} / ${VOKABELN.length} · ${DECK_NAME}</div>
-    <div class="card" id="karte">
+    <div class="card ${PRUEFPFAD_AKTIV ? 'pruefpfad-modus' : ''}" id="karte">
       ${gibFaceHTML(v, 0)}
     </div>
+    ${pruefpfadHTML}
     <div class="controls">
       <button class="btn-zurueck" id="btnZurueckKarte" ${idx === 0 ? 'disabled' : ''}>← Zurück</button>
       <button class="btn-merken ${gemerkt ? 'aktiv' : ''}" id="btnMerken">${merkenLabel}</button>
@@ -1795,17 +2007,33 @@ function render(){
 
   const karte = document.getElementById('karte');
 
+  if(PRUEFPFAD_AKTIV){
+    document.getElementById('zahlenTastatur').addEventListener('click', e => {
+      const taste = e.target.closest('[data-taste]');
+      if(taste) pruefpfadTaste(taste.getAttribute('data-taste'));
+    });
+  }
+
   // Karte umdrehen/weiterblättern durch die Zusatzseiten -- dieselbe Logik,
   // die vorher direkt in karte.onclick stand, jetzt als eigene Funktion,
   // damit sowohl ein normaler Tap (kein nennenswertes Wischen) als auch das
   // Ende einer Wisch-Geste ohne Richtung sie gleichermaßen auslösen können.
+  // Bei aktivem Prüfpfad ist das Wenden zusätzlich gesperrt, bis für diese
+  // Karte mindestens einmal geprüft wurde (PRUEFPFAD_GEPRUEFT) -- das Prüfen
+  // selbst dreht die Karte NICHT automatisch um, das bleibt bewusst ein
+  // zusätzlicher, separater Klick/Tap.
   const umdrehen = () => {
+    if(PRUEFPFAD_AKTIV && zustand === 0 && !PRUEFPFAD_GEPRUEFT) return;
     const maxZustand = maxZustandFuer(v);
     zustand = (zustand + 1) > maxZustand ? 0 : zustand + 1;
     karte.innerHTML = gibFaceHTML(v, zustand);
     const faceEl = karte.querySelector('.face');
     faceEl.classList.add('eintretend');
     requestAnimationFrame(() => faceEl.classList.remove('eintretend'));
+    if(PRUEFPFAD_AKTIV){
+      const bereich = document.getElementById('pruefpfadBereich');
+      if(bereich) bereich.style.display = zustand === 0 ? '' : 'none';
+    }
   };
 
   // Wisch-Geste: zusätzlich zu den Buttons soll man auch über die Karte
@@ -1843,6 +2071,39 @@ function render(){
   document.getElementById('btnWeiter').onclick = (e) => { e.stopPropagation(); weiter(); };
   document.getElementById('btnZurueckKarte').onclick = (e) => { e.stopPropagation(); vorherige(); };
   document.getElementById('btnMerken').onclick = (e) => { e.stopPropagation(); toggleMerken(); };
+}
+
+// Eine einzelne Tastatur-Taste des Prüfpfads verarbeiten: Ziffer anhängen,
+// löschen, oder (bei "enter") die aktuelle Eingabe prüfen.
+function pruefpfadTaste(taste){
+  const feld = document.getElementById('pruefpfadEingabe');
+  if(!feld) return;
+  if(taste === 'enter'){
+    pruefeAntwort();
+    return;
+  }
+  if(taste === 'loeschen'){
+    PRUEFPFAD_EINGABE = PRUEFPFAD_EINGABE.slice(0, -1);
+  } else {
+    PRUEFPFAD_EINGABE += taste;
+  }
+  feld.value = PRUEFPFAD_EINGABE;
+  feld.classList.remove('richtig', 'falsch');
+}
+
+// Vergleicht die eingetippte Zahl mit der hinterlegten Antwort (einfacher
+// Textvergleich nach dem Trimmen -- die Tastatur lässt ohnehin nur Ziffern
+// zu) und färbt das Eingabefeld grün/rot ein. Setzt PRUEFPFAD_GEPRUEFT, womit
+// die Karte ab jetzt gewendet werden darf -- das Wenden selbst passiert aber
+// weiterhin erst durch einen eigenen Klick/Tap auf die Karte, nicht hier.
+function pruefeAntwort(){
+  const v = VOKABELN[idx];
+  const feld = document.getElementById('pruefpfadEingabe');
+  if(!feld || !v) return;
+  const richtig = PRUEFPFAD_EINGABE.trim() === String(v.antwort).trim();
+  feld.classList.remove('richtig', 'falsch');
+  feld.classList.add(richtig ? 'richtig' : 'falsch');
+  PRUEFPFAD_GEPRUEFT = true;
 }
 
 // Ist die übergebene Karte gerade im Wiedervorlage-Stapel? Vergleich über
@@ -1929,6 +2190,7 @@ document.getElementById('themeToggle').onclick = async () => {
   if(decks && Object.keys(decks).length > 0){
     AKTIVE_DATEI = decks;
     STUNDENPLAN = gespeichert.stundenplan || null;
+    PRUEFPFAD_DECKS = gespeichert.pruefpfadDecks || [];
     zeigeDeckAuswahl();
   } else {
     zeigeLeerenZustand();
