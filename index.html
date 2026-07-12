@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.24
+  SmartCards — Version 1.25
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -191,6 +191,17 @@
          zeigeLoesungAufKarte()). Wenden ist im Prüfpfad dadurch komplett
          deaktiviert -- auch für seite3/seite4 -- gilt aber ausdrücklich nur,
          solange der Prüfpfad für diese Lernsitzung eingeschaltet ist.
+  v1.25 – Automatische Schriftgrößen-Anpassung für Frage/Antwort (und
+         strukturell gleiche Textblöcke auf Zusatzseiten bzw. in der
+         Prüfpfad-Lösungsansicht): passeSchriftgroesseAn() vergleicht nach
+         jeder Kartenanzeige face.scrollHeight mit face.clientHeight und
+         verkleinert bei Überlauf die Schrift in 5%-Schritten (relativ zur
+         jeweils eigenen festen CSS-Größe), bis alles hineinpasst oder
+         SCHRIFT_MIN_PX (16px) erreicht ist. Kurze Texte bleiben dadurch
+         unverändert in der bisherigen festen Größe. Aufgerufen nach der
+         initialen Kartenanzeige, nach jedem Wenden und nach dem Einblenden
+         der Prüfpfad-Lösung (jeweils per requestAnimationFrame, damit das
+         Layout vor der Messung tatsächlich steht).
 -->
 <html lang="de" data-theme="blau">
 <head>
@@ -1048,7 +1059,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.24';
+const APP_VERSION = '1.25';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -2020,6 +2031,58 @@ function gibFaceHTML(v, zustand){
   </div>`;
 }
 
+// Mindestgröße, unter die Frage-/Antwort-Text nie verkleinert wird, damit er
+// nicht unleserlich klein wird. 16px ist die gängige Untergrenze für gut
+// lesbaren Fließtext auf einem Handy-Bildschirm -- kleiner sollten selbst
+// sehr lange Fragen/Antworten nicht dargestellt werden; im Zweifel bleibt
+// dann lieber ein kleiner Überlauf bestehen, als dass der Text kaum noch zu
+// entziffern ist.
+const SCHRIFT_MIN_PX = 16;
+
+// Passt die Schriftgröße von Frage/Antwort (und den strukturell gleichen
+// Textblöcken auf Zusatzseiten bzw. in der Prüfpfad-Lösungsansicht)
+// automatisch an, falls der Text sonst über die feste Kartenfläche
+// hinausragen würde.
+//
+// Technik: Statt den Text selbst zeilenweise zu vermessen (aufwendig und
+// von Schriftart/Zeilenumbrüchen abhängig), wird nur verglichen, ob die
+// Kartenseite insgesamt überläuft -- face.scrollHeight (die tatsächlich
+// benötigte Höhe allen Inhalts) gegen face.clientHeight (die tatsächlich
+// verfügbare, durch .card fest vorgegebene Höhe). Das funktioniert
+// zuverlässig unabhängig vom Textinhalt und auch dann, wenn mehrere
+// Textblöcke gleichzeitig auf einer Seite stehen (z.B. Frage oben + Lösung
+// unten im Prüfpfad): alle gefundenen Textblöcke werden dafür gemeinsam,
+// mit demselben Skalierungsfaktor relativ zu ihrer jeweils eigenen festen
+// CSS-Größe, verkleinert -- so bleiben ihre Größenverhältnisse zueinander
+// erhalten, statt dass am Ende alle exakt gleich groß wären.
+//
+// Startpunkt ist immer die feste CSS-Größe (dafür wird zuerst jede evtl.
+// von der vorherigen Karte übrig gebliebene Inline-Größe zurückgesetzt) --
+// kurze Texte bleiben dadurch exakt so groß wie bisher, die Verkleinerung
+// greift nur, wenn tatsächlich Überlauf besteht. Verkleinert wird in
+// Schritten von 5% der jeweiligen Ausgangsgröße, bis entweder alles
+// hineinpasst oder die kleinste beteiligte Größe SCHRIFT_MIN_PX erreicht --
+// danach wird nicht weiter verkleinert.
+function passeSchriftgroesseAn(){
+  const karte = document.getElementById('karte');
+  if(!karte) return;
+  const face = karte.querySelector('.face');
+  if(!face) return;
+
+  const ziele = Array.from(face.querySelectorAll('.wort, .notiz-text, .pruefpfad-loesung-text'));
+  if(ziele.length === 0) return;
+
+  ziele.forEach(el => { el.style.fontSize = ''; });
+  const startGroessen = ziele.map(el => parseFloat(getComputedStyle(el).fontSize));
+  const kleinsteStartGroesse = Math.min(...startGroessen);
+
+  let faktor = 1;
+  while(face.scrollHeight > face.clientHeight && kleinsteStartGroesse * faktor > SCHRIFT_MIN_PX){
+    faktor -= 0.05;
+    ziele.forEach((el, i) => { el.style.fontSize = (startGroessen[i] * faktor) + 'px'; });
+  }
+}
+
 function render(){
   if(idx >= VOKABELN.length){
     stage.innerHTML = `
@@ -2095,6 +2158,7 @@ function render(){
   `;
 
   const karte = document.getElementById('karte');
+  requestAnimationFrame(() => passeSchriftgroesseAn());
 
   if(PRUEFPFAD_AKTIV){
     document.getElementById('zahlenTastatur').addEventListener('click', e => {
@@ -2121,7 +2185,7 @@ function render(){
     karte.innerHTML = gibFaceHTML(v, zustand);
     const faceEl = karte.querySelector('.face');
     faceEl.classList.add('eintretend');
-    requestAnimationFrame(() => faceEl.classList.remove('eintretend'));
+    requestAnimationFrame(() => { faceEl.classList.remove('eintretend'); passeSchriftgroesseAn(); });
   };
 
   // Wisch-Geste: zusätzlich zu den Buttons soll man auch über die Karte
@@ -2211,6 +2275,7 @@ function zeigeLoesungAufKarte(){
   const karte = document.getElementById('karte');
   if(!karte || !v) return;
   karte.innerHTML = gibPruefpfadLoesungHTML(v);
+  requestAnimationFrame(() => passeSchriftgroesseAn());
 }
 
 // Ist die übergebene Karte gerade im Wiedervorlage-Stapel? Vergleich über
