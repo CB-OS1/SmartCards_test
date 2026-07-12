@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.22
+  SmartCards — Version 1.23
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -171,6 +171,17 @@
          bewusst nicht Teil der [data-theme]-Blöcke, damit "richtig"/"falsch"
          immer wie eine echte Ampelfarbe aussieht, unabhängig vom gewählten
          Farbschema.
+  v1.23 – Bugfix Prüfpfad: Karte "sprang" beim Wenden nach dem Prüfen sichtbar
+         nach oben/an eine andere Stelle. Ursache: der Prüfpfad-Bereich
+         (Eingabefeld + Tastatur) wurde beim Wenden per display:none komplett
+         aus dem Layout entfernt -- der Stage-Flex-Container (justify-
+         content:center) hat die dadurch kürzere Gesamthöhe neu zentriert,
+         wodurch Karte + Controls nachrückten. Jetzt visibility:hidden statt
+         display:none (siehe umdrehen() in render()): der Bereich bleibt im
+         Layout und behält seinen Platz, nur unsichtbar -- Frage- und
+         Antwortseite erscheinen dadurch exakt gleich groß und an derselben
+         Stelle, so als stünde die (jetzt nur unsichtbare) Tastatur weiterhin
+         darunter.
 -->
 <html lang="de" data-theme="blau">
 <head>
@@ -986,7 +997,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.22';
+const APP_VERSION = '1.23';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -2031,8 +2042,14 @@ function render(){
     faceEl.classList.add('eintretend');
     requestAnimationFrame(() => faceEl.classList.remove('eintretend'));
     if(PRUEFPFAD_AKTIV){
+      // visibility statt display: das Element bleibt im Layout und behält
+      // seinen Platz -- sonst rückt beim Verschwinden der Tastatur alles
+      // im Stage-Flex-Container nach oben nach (justify-content:center
+      // zentriert dann eine kürzere Gesamthöhe), wodurch Frage- und
+      // Antwortseite an unterschiedlichen Stellen und in unterschiedlicher
+      // Höhe erscheinen -- genau der Sprung, der verwirrend wirkt.
       const bereich = document.getElementById('pruefpfadBereich');
-      if(bereich) bereich.style.display = zustand === 0 ? '' : 'none';
+      if(bereich) bereich.style.visibility = zustand === 0 ? 'visible' : 'hidden';
     }
   };
 
