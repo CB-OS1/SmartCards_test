@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.14
+  SmartCards — Version 1.15
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -93,6 +93,13 @@
          Decks geladen"). (4) Der "N"-Badge oben rechts auf der Karte (Hinweis
          auf Zusatzseiten) wurde entfernt (hatNotiz() war dadurch ungenutzt
          und wurde mit entfernt).
+  v1.15 – Neuer, schmalerer Button "Liste" unterhalb von Sortiert/Gemischt auf
+         der Sortier-Auswahl (gleiche Konvention wie in Ucabulario/
+         Vocabolario). Exportiert das aktuelle Deck (nur Frage/Antwort, in
+         der Original-Reihenfolge aus der xlsx bzw. aus WIEDERVORLAGE) als
+         eigene .xlsx-Datei zum Download (exportiereDeckAlsXLSX(), nutzt die
+         ohnehin schon vorhandene SheetJS-Anbindung aus
+         ladeSheetJSBibliothek()).
 -->
 <html lang="de">
 <head>
@@ -408,6 +415,23 @@
     display:block;
   }
   .niveau-btn.a1 .label, .niveau-btn.a2 .label{ color: var(--mare); }
+
+  /* Dritter, dünnerer Button auf der Sortier-Auswahl ("Liste") -- bewusst
+     kompakter und leicht abgesetzt, damit klar ist: andere Kategorie von
+     Aktion als "Sortiert"/"Gemischt" (kein Karteikarten-Modus, sondern ein
+     xlsx-Export). Gleiche Konvention wie in Ucabulario/Vocabolario. */
+  .niveau-btn.liste{
+    padding: 10px 20px;
+    text-align:center;
+    border-width: 1px;
+    box-shadow: 2px 2px 0 var(--inchiostro);
+    margin-top: 8px;
+  }
+  .niveau-btn.liste:active{ box-shadow: 1px 1px 0 var(--inchiostro); }
+  .niveau-btn.liste .label{
+    font-size:15px;
+    color: var(--mare);
+  }
   .niveau-wechsel{
     text-align:center;
     margin-top: 12px;
@@ -676,7 +700,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.14';
+const APP_VERSION = '1.15';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -1463,11 +1487,43 @@ function zeigeSortierAuswahl(){
           <span class="label">Gemischt</span>
           <span class="desc">Zufällige Reihenfolge</span>
         </div>
+        <div class="niveau-btn liste" id="btnListe">
+          <span class="label">Liste</span>
+        </div>
       </div>
     </div>
   `;
   document.getElementById('btnSortiert').onclick = () => waehleSortierung(true);
   document.getElementById('btnGemischt').onclick = () => waehleSortierung(false);
+  document.getElementById('btnListe').onclick = () => exportiereDeckAlsXLSX();
+}
+
+// Exportiert das aktuell gewählte Deck (nur Spalten Frage/Antwort) als eigene
+// .xlsx-Datei, die der Browser zum Download anbietet -- tippt man die
+// heruntergeladene Datei an, öffnet sie sich wie gewohnt in Excel, Numbers,
+// Google Sheets & Co. Nutzt bewusst NICHT VOKABELN als Quelle, sondern die
+// Original-Reihenfolge aus AKTIVE_DATEI (bzw. WIEDERVORLAGE): VOKABELN könnte
+// bei "Gemischt" bereits durchmischt sein, ein Export als Nachschlagewerk
+// sollte aber unabhängig von der Karteikarten-Reihenfolge stabil bleiben --
+// gleiches Prinzip wie in vokabelnNeuLaden().
+async function exportiereDeckAlsXLSX(){
+  const quelle = WIEDERVORLAGE_MODUS ? WIEDERVORLAGE : AKTIVE_DATEI[DECK_NAME];
+  const daten = [['Frage', 'Antwort'], ...quelle.map(v => [v.frage, v.antwort])];
+
+  await ladeSheetJSBibliothek();
+  const ws = XLSX.utils.aoa_to_sheet(daten);
+  ws['!cols'] = [{ wch: 32 }, { wch: 32 }];
+  const wb = XLSX.utils.book_new();
+
+  // Blattnamen sind in xlsx auf 31 Zeichen begrenzt und dürfen bestimmte
+  // Zeichen nicht enthalten ( \ / ? * [ ] : ) -- der Deck-Name könnte beides
+  // verletzen, deshalb hier bereinigt. Für den Dateinamen reicht eine simple
+  // Ersetzung der auf den gängigen Betriebssystemen verbotenen Zeichen.
+  const blattname = DECK_NAME.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Deck';
+  XLSX.utils.book_append_sheet(wb, ws, blattname);
+
+  const dateiname = DECK_NAME.replace(/[\\/:*?"<>|]/g, '_') + '.xlsx';
+  XLSX.writeFile(wb, dateiname);
 }
 
 function waehleSortierung(sortiert){
