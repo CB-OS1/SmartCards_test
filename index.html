@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.23
+  SmartCards — Version 1.24
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -182,6 +182,15 @@
          Antwortseite erscheinen dadurch exakt gleich groß und an derselben
          Stelle, so als stünde die (jetzt nur unsichtbare) Tastatur weiterhin
          darunter.
+  v1.24 – Prüfpfad: Merken-Button in der Mitte wird durch einen Lösung-Button
+         ersetzt (erst klickbar, sobald für die Karte mindestens einmal
+         geprüft wurde -- egal ob richtig oder falsch). Klick zeigt die
+         Lösung nicht mehr durch Wenden, sondern direkt auf derselben
+         Kartenseite: Frage wandert nach oben, die Lösung erscheint darunter
+         in einer eigenen hellen Box (gibPruefpfadLoesungHTML(),
+         zeigeLoesungAufKarte()). Wenden ist im Prüfpfad dadurch komplett
+         deaktiviert -- auch für seite3/seite4 -- gilt aber ausdrücklich nur,
+         solange der Prüfpfad für diese Lernsitzung eingeschaltet ist.
 -->
 <html lang="de" data-theme="blau">
 <head>
@@ -417,6 +426,36 @@
   .face.front{ background: var(--azzurro); color: var(--carta); }
   .face.back{ background: var(--flaeche); color: var(--inchiostro); }
   .face.notiz{ background: var(--flaeche-tief); color: var(--inchiostro); }
+
+  /* Prüfpfad-Lösungsansicht: Frage wandert nach oben (justify-content:
+     flex-start statt center), die Lösung wird in einer eigenen, hell
+     abgesetzten Box an den unteren Rand gedrückt (margin-top:auto) --
+     dieselbe Kartenseite, kein Wenden. */
+  .face.pruefpfad-geloest{ justify-content: flex-start; }
+  .pruefpfad-frage-oben{ width:100%; }
+  .pruefpfad-frage-oben .wort{ font-size:26px; margin-bottom:0; }
+  .pruefpfad-loesung-unten{
+    margin-top:auto;
+    width:100%;
+    box-sizing:border-box;
+    background: var(--flaeche);
+    color: var(--inchiostro);
+    border-radius:14px;
+    padding:14px 16px;
+  }
+  .pruefpfad-loesung-label{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    opacity:0.55;
+    margin-bottom:4px;
+  }
+  .pruefpfad-loesung-text{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:24px;
+    line-height:1.15;
+  }
   .face.eintretend{
     transform: scale(0.96);
     opacity: 0;
@@ -553,6 +592,18 @@
   .btn-merken.aktiv{
     background: var(--bernstein);
     color: var(--bernstein-text);
+  }
+
+  /* Lösung-Button: ersetzt im Prüfpfad den Merken-Button in der Mitte.
+     --mare statt --bernstein, damit klar bleibt: das ist eine andere Aktion
+     (Lösung einblenden) als Merken/Wiedervorlage. Vor der ersten Prüfung
+     disabled -- Optik dafür übernimmt die allgemeine button:disabled-Regel. */
+  .btn-loesung{
+    font-size:13px;
+    padding:11px 4px;
+    background: var(--flaeche-alt);
+    border-color: var(--mare);
+    color: var(--mare);
   }
 
   button:disabled{ opacity:0.35; cursor:default; }
@@ -997,7 +1048,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.23';
+const APP_VERSION = '1.24';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -1916,6 +1967,23 @@ function gibInhaltHTML(text, altText, textKlasse){
     : `<div class="${textKlasse}">${text}</div>`;
 }
 
+// Prüfpfad: statt die Karte zu wenden, wird die Lösung auf DERSELBEN
+// Kartenseite eingeblendet -- Frage wandert nach oben, die Lösung erscheint
+// darunter in einer eigenen, hell abgesetzten Box. Wird über den
+// Lösung-Button aufgerufen (siehe zeigeLoesungAufKarte()), niemals über das
+// normale Wenden (das ist im Prüfpfad komplett deaktiviert, siehe umdrehen()
+// in render()).
+function gibPruefpfadLoesungHTML(v){
+  return `<div class="face front pruefpfad-geloest">
+    <div class="kategorie">${v.kat}</div>
+    <div class="pruefpfad-frage-oben">${gibInhaltHTML(v.frage, 'Frage', 'wort')}</div>
+    <div class="pruefpfad-loesung-unten">
+      <div class="pruefpfad-loesung-label">Lösung</div>
+      ${gibInhaltHTML(v.antwort, 'Antwort', 'pruefpfad-loesung-text')}
+    </div>
+  </div>`;
+}
+
 function gibFaceHTML(v, zustand){
   if(zustand === 0){
     return `<div class="face front">
@@ -1977,6 +2045,16 @@ function render(){
   const gemerkt = WIEDERVORLAGE_MODUS || istInWiedervorlage(v);
   const merkenLabel = WIEDERVORLAGE_MODUS ? '✕ Entfernen' : (gemerkt ? '✓ Gemerkt' : '★ Merken');
 
+  // Im Prüfpfad ersetzt der Lösung-Button den Merken-Button in der Mitte --
+  // Merken ergibt hier keinen Sinn, stattdessen kann man sich die Lösung auf
+  // derselben Kartenseite einblenden lassen (siehe zeigeLoesungAufKarte()).
+  // Erst klickbar, nachdem für diese Karte mindestens einmal geprüft wurde
+  // (PRUEFPFAD_GEPRUEFT, egal ob richtig oder falsch) -- pruefeAntwort()
+  // schaltet den Button direkt frei, ohne dass dafür neu gerendert wird.
+  const mittlererButtonHTML = PRUEFPFAD_AKTIV
+    ? `<button class="btn-loesung" id="btnLoesung" ${PRUEFPFAD_GEPRUEFT ? '' : 'disabled'}>Lösung</button>`
+    : `<button class="btn-merken ${gemerkt ? 'aktiv' : ''}" id="btnMerken">${merkenLabel}</button>`;
+
   // Prüfpfad-Bereich (Eingabefeld + Zahlen-Tastatur) nur, wenn für diese
   // Lernsitzung eingeschaltet (siehe waehleSortierung). Liegt direkt unter
   // der Karte, nicht darin -- die Karte selbst wird beim Wenden komplett neu
@@ -2011,7 +2089,7 @@ function render(){
     ${pruefpfadHTML}
     <div class="controls">
       <button class="btn-zurueck" id="btnZurueckKarte" ${idx === 0 ? 'disabled' : ''}>← Zurück</button>
-      <button class="btn-merken ${gemerkt ? 'aktiv' : ''}" id="btnMerken">${merkenLabel}</button>
+      ${mittlererButtonHTML}
       <button class="btn-weiter" id="btnWeiter">Weiter →</button>
     </div>
   `;
@@ -2034,23 +2112,16 @@ function render(){
   // selbst dreht die Karte NICHT automatisch um, das bleibt bewusst ein
   // zusätzlicher, separater Klick/Tap.
   const umdrehen = () => {
-    if(PRUEFPFAD_AKTIV && zustand === 0 && !PRUEFPFAD_GEPRUEFT) return;
+    // Im Prüfpfad ist Wenden komplett deaktiviert -- auch nach dem Prüfen,
+    // auch wenn es seite3/seite4 gäbe. Die Lösung erscheint stattdessen über
+    // den Lösung-Button auf derselben Kartenseite (zeigeLoesungAufKarte()).
+    if(PRUEFPFAD_AKTIV) return;
     const maxZustand = maxZustandFuer(v);
     zustand = (zustand + 1) > maxZustand ? 0 : zustand + 1;
     karte.innerHTML = gibFaceHTML(v, zustand);
     const faceEl = karte.querySelector('.face');
     faceEl.classList.add('eintretend');
     requestAnimationFrame(() => faceEl.classList.remove('eintretend'));
-    if(PRUEFPFAD_AKTIV){
-      // visibility statt display: das Element bleibt im Layout und behält
-      // seinen Platz -- sonst rückt beim Verschwinden der Tastatur alles
-      // im Stage-Flex-Container nach oben nach (justify-content:center
-      // zentriert dann eine kürzere Gesamthöhe), wodurch Frage- und
-      // Antwortseite an unterschiedlichen Stellen und in unterschiedlicher
-      // Höhe erscheinen -- genau der Sprung, der verwirrend wirkt.
-      const bereich = document.getElementById('pruefpfadBereich');
-      if(bereich) bereich.style.visibility = zustand === 0 ? 'visible' : 'hidden';
-    }
   };
 
   // Wisch-Geste: zusätzlich zu den Buttons soll man auch über die Karte
@@ -2087,7 +2158,11 @@ function render(){
 
   document.getElementById('btnWeiter').onclick = (e) => { e.stopPropagation(); weiter(); };
   document.getElementById('btnZurueckKarte').onclick = (e) => { e.stopPropagation(); vorherige(); };
-  document.getElementById('btnMerken').onclick = (e) => { e.stopPropagation(); toggleMerken(); };
+  if(PRUEFPFAD_AKTIV){
+    document.getElementById('btnLoesung').onclick = (e) => { e.stopPropagation(); zeigeLoesungAufKarte(); };
+  } else {
+    document.getElementById('btnMerken').onclick = (e) => { e.stopPropagation(); toggleMerken(); };
+  }
 }
 
 // Eine einzelne Tastatur-Taste des Prüfpfads verarbeiten: Ziffer anhängen,
@@ -2121,6 +2196,21 @@ function pruefeAntwort(){
   feld.classList.remove('richtig', 'falsch');
   feld.classList.add(richtig ? 'richtig' : 'falsch');
   PRUEFPFAD_GEPRUEFT = true;
+  // Lösung-Button direkt freischalten, ohne komplett neu zu rendern --
+  // egal ob richtig oder falsch, ab jetzt darf man sich die Lösung ansehen.
+  const loesungBtn = document.getElementById('btnLoesung');
+  if(loesungBtn) loesungBtn.disabled = false;
+}
+
+// Zeigt die Lösung auf DERSELBEN Kartenseite (siehe gibPruefpfadLoesungHTML) --
+// kein Wenden, keine Zusatzseiten. Nur erreichbar, wenn der Lösung-Button
+// nicht (mehr) disabled ist, also mindestens einmal geprüft wurde.
+function zeigeLoesungAufKarte(){
+  if(!PRUEFPFAD_GEPRUEFT) return;
+  const v = VOKABELN[idx];
+  const karte = document.getElementById('karte');
+  if(!karte || !v) return;
+  karte.innerHTML = gibPruefpfadLoesungHTML(v);
 }
 
 // Ist die übergebene Karte gerade im Wiedervorlage-Stapel? Vergleich über
