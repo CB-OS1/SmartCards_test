@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.15
+  SmartCards — Version 1.19
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -100,8 +100,49 @@
          eigene .xlsx-Datei zum Download (exportiereDeckAlsXLSX(), nutzt die
          ohnehin schon vorhandene SheetJS-Anbindung aus
          ladeSheetJSBibliothek()).
+  v1.16 – "Liste"-Button zeigt das Deck jetzt statt eines xlsx-Downloads
+         als Tabelle direkt in der App an (zeigeListenAnsicht(), CSS
+         .liste-wrapper/.liste-tabelle), analog zur bestehenden Listenansicht
+         in Vocabolario. exportiereDeckAlsXLSX() aus v1.15 wurde ersetzt und
+         entfernt, SheetJS wird für diesen Button nicht mehr gebraucht (bleibt
+         aber weiterhin für den xlsx-Upload im Einsatz).
+  v1.17 – Farbschema der Kartenseiten vertauscht: Frage (front) ist jetzt die
+         hervorgehobene, blaue Seite (--azzurro-Hintergrund, heller als das
+         vorherige dunkle Marineblau), Antwort (back) ist jetzt die helle
+         Seite (genau die bisherige Optik der Frage). Zusatzseiten
+         (seite3/seite4, Klasse "notiz") bekommen einen sehr dezenten
+         Blau-Hauch (#eef5fb) statt des bisherigen dunklen Hintergrunds.
+         seite-bild-fehler nutzt jetzt die vererbte Textfarbe statt einer
+         fest verdrahteten hellen Farbe, damit Fehlertexte auf allen drei
+         (jetzt unterschiedlich hellen) Kartenseiten lesbar bleiben.
+  v1.18 – Mehrere Farbschemata: neuer Button (🎨) oben rechts im Header
+         schaltet bei jedem Klick zum nächsten Schema in FARBSCHEMEN
+         weiter (Blau -> Rot -> Grün -> Rosa -> wieder Blau), Auswahl wird
+         gespeichert (Storage-Key "farbschema") und beim nächsten Start
+         automatisch wieder angewendet. Dazu ALLE bis dahin fest
+         verdrahteten Hex-/RGBA-Farbwerte im CSS durch Variablen ersetzt
+         (--flaeche, --flaeche-alt, --flaeche-tief, --fehler-bg neu, dazu
+         RGB-Tripel --inchiostro-rgb/--azzurro-rgb/--cielo-rgb für
+         rgba()-Herleitungen wie --linea/--textur/--tabellen-tint). Jedes
+         Farbschema ist ein eigener [data-theme="..."]-CSS-Block, das
+         Umschalten setzt nur noch das data-theme-Attribut auf <html>
+         (wendeFarbschemaAn()). --bernstein bleibt bewusst in jedem Schema
+         identisch (exklusiv für die Wiedervorlage, muss sich immer
+         abheben, egal welches Schema gerade aktiv ist).
+  v1.19 – Fortschritt-Konzept komplett entfernt: keine "Karten heute"-Zählung
+         mehr (Stats-Pill oben samt Punkt-Farblegende raus), kein "Fortschritt
+         zurücksetzen"-Link mehr, kein Fortschritts-Speicher pro Deck mehr
+         (ladeFortschritt()/speichereFortschritt()/aktualisiereStats()
+         entfernt). Jedes Deck startet jetzt beim Öffnen (waehleDeck() /
+         waehleWiedervorlage()) immer bei Karte 1, unabhängig davon, wo man
+         zuletzt aufgehört hatte. "Deck wechseln" bleibt erhalten (eigener
+         Link deckWechselRow, vorher zusammen mit "Fortschritt
+         zurücksetzen" in einer Zeile). loescheAltenFortschritt() umbenannt
+         zu raeumeBeimDateiwechselAuf() und auf das Nötige reduziert:
+         Wiedervorlage zurücksetzen plus Aufräumen alter
+         "vocab-progress-"-Einträge aus Versionen vor diesem Update.
 -->
-<html lang="de">
+<html lang="de" data-theme="blau">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
@@ -115,15 +156,92 @@
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
   :root{
-    --inchiostro: #17324f;     /* dunkles Marineblau, "Tinte" */
-    --carta: #f3f7fb;          /* Papierton, kühles Blauweiß */
-    --mare: #2f6690;           /* Seeblau, starker Akzent (ehem. Terrakotta) */
-    --cielo: #7fb2d6;          /* Himmelblau, ruhiger Kontrast (ehem. Salbeigrün) */
-    --azzurro: #3f8fd1;        /* Azurblau, klarer Akzent (ehem. Senfgold) */
-    --bernstein: #d98e3b;      /* Bernstein/Amber, exklusiv für die Wiedervorlage-Funktion --
-                                  bewusst eine ganz eigene Farbe (nicht Blauton), damit sich
-                                  Wiedervorlage-Kachel und Merken-Button klar vom Rest abheben */
-    --linea: rgba(23,50,79,0.14);
+    /* ---- Farbschema "Blau" (Standard) ----
+       Jedes Farbschema definiert genau diese 11 Variablen neu (siehe die
+       [data-theme="..."]-Blöcke weiter unten). Alles andere in der App
+       verweist ausschließlich auf diese Variablen -- nirgends stehen mehr
+       feste Hex-/RGBA-Werte im CSS, deshalb reicht ein Wechsel von
+       data-theme auf <html>, um die komplette Optik umzufärben. */
+    --inchiostro: #17324f;     /* dunkles Marineblau, "Tinte" (Rahmen, Schatten, Text) */
+    --inchiostro-rgb: 23,50,79;  /* dieselbe Farbe als r,g,b -- nötig für rgba()-Herleitungen weiter unten */
+    --carta: #f3f7fb;          /* Papierton, kühles Blauweiß (Seitenhintergrund, heller Text auf Blau) */
+    --mare: #2f6690;           /* Seeblau, sekundärer Akzent (Lade-Kacheln, Fehlermeldungen) */
+    --cielo: #7fb2d6;          /* Himmelblau, ruhiger Kontrast (Stundenplan-Kachel) */
+    --cielo-rgb: 127,178,214;
+    --azzurro: #3f8fd1;        /* Azurblau, kräftigster Akzent (Frageseite, Weiter-Button, ...) */
+    --azzurro-rgb: 63,143,209;
+    --flaeche: #f8fbfe;        /* helle Kartenoberfläche (Buttons, Deck-Kacheln, Antwortseite) */
+    --flaeche-alt: #eaf5fb;    /* etwas anderer Hellton, exklusiv für den Zurück-Button */
+    --flaeche-tief: #eef5fb;   /* sehr dezent getönte Fläche (Zusatzseiten, Lade-Kacheln) */
+    --fehler-bg: #e8f1f7;      /* Hintergrund für Fehlermeldungs-Kästen */
+
+    /* Bernstein/Amber ist bewusst in JEDEM Farbschema IDENTISCH -- exklusiv
+       für die Wiedervorlage-Funktion. Würde sie mit umgefärbt (z.B. beim
+       Rot-Schema), verschwände genau der Kontrast, der die Wiedervorlage
+       überhaupt als "besonderen Stapel" erkennbar macht. */
+    --bernstein: #d98e3b;
+    --bernstein-rgb: 217,142,59;
+    --bernstein-text: #fffaf3;  /* warmes Off-White, passend zu --bernstein, ebenfalls konstant */
+
+    /* Ab hier: Werte, die sich aus den Variablen oben herleiten (Transparenz-
+       Effekte). Diese hier NUR EINMAL definieren, NICHT pro Farbschema --
+       durch das var(...) darin lesen sie automatisch die aktuell aktive
+       Kernfarbe (inchiostro/azzurro/bernstein) des jeweils gewählten
+       Schemas, ganz ohne Wiederholung in jedem [data-theme]-Block. */
+    --linea: rgba(var(--inchiostro-rgb), 0.14);        /* dünne Trennlinien (Pill-Rahmen, Tabellen) */
+    --textur: rgba(var(--inchiostro-rgb), 0.06);       /* Punktmuster im Seitenhintergrund */
+    --overlay-dunkel: rgba(var(--inchiostro-rgb), 0.55); /* Abdunklung hinter Dialogen */
+    --tabellen-tint: rgba(var(--azzurro-rgb), 0.06);   /* gestreifte Zeilen in der Listenansicht */
+    --stundenplan-tint: rgba(var(--cielo-rgb), 0.22);  /* Hintergrund der Stundenplan-Kachel */
+    --merken-tint: rgba(var(--bernstein-rgb), 0.14);   /* Hintergrundton für Merken-Button & Wiedervorlage-Kachel */
+  }
+
+  /* ---- Farbschema "Rot" ---- */
+  [data-theme="rot"]{
+    --inchiostro: #5c1a1a;
+    --inchiostro-rgb: 92,26,26;
+    --carta: #fbf3f3;
+    --mare: #8f3a3a;
+    --cielo: #e2a8a8;
+    --cielo-rgb: 226,168,168;
+    --azzurro: #d1483f;
+    --azzurro-rgb: 209,72,63;
+    --flaeche: #fef8f8;
+    --flaeche-alt: #fbeaea;
+    --flaeche-tief: #fbeeee;
+    --fehler-bg: #f7e8e8;
+  }
+
+  /* ---- Farbschema "Grün" ---- */
+  [data-theme="gruen"]{
+    --inchiostro: #1a3d2e;
+    --inchiostro-rgb: 26,61,46;
+    --carta: #f3f9f5;
+    --mare: #2f6b4f;
+    --cielo: #9dcbb0;
+    --cielo-rgb: 157,203,176;
+    --azzurro: #3fa66a;
+    --azzurro-rgb: 63,166,106;
+    --flaeche: #f7fdf9;
+    --flaeche-alt: #e9f6ee;
+    --flaeche-tief: #edf7f1;
+    --fehler-bg: #e8f5ec;
+  }
+
+  /* ---- Farbschema "Rosa" ---- */
+  [data-theme="rosa"]{
+    --inchiostro: #5c1f47;
+    --inchiostro-rgb: 92,31,71;
+    --carta: #fdf3f8;
+    --mare: #9c3d76;
+    --cielo: #e6a9cf;
+    --cielo-rgb: 230,169,207;
+    --azzurro: #d94f9e;
+    --azzurro-rgb: 217,79,158;
+    --flaeche: #fef7fb;
+    --flaeche-alt: #fbe9f4;
+    --flaeche-tief: #fceef7;
+    --fehler-bg: #f8e8f2;
   }
 
   *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
@@ -131,8 +249,9 @@
   body{
     background: var(--carta);
     background-image:
-      radial-gradient(circle at 1px 1px, rgba(31,45,61,0.06) 1px, transparent 0);
+      radial-gradient(circle at 1px 1px, var(--textur) 1px, transparent 0);
     background-size: 22px 22px;
+
     color: var(--inchiostro);
     font-family: 'Space Grotesk', sans-serif;
     min-height: 100dvh;
@@ -172,25 +291,28 @@
     opacity:0.55;
   }
 
-  .stats{
-    display:flex;
-    gap:10px;
-    margin: 14px 0 18px;
-    font-size:12px;
-  }
-  .pill{
-    border:1px solid var(--linea);
-    border-radius:999px;
-    padding:6px 12px;
+  /* Farbschema-Button oben rechts im Header. align-self:center statt des
+     von <header> geerbten align-items:baseline -- ein Icon-Button soll
+     mittig sitzen, nicht an der Textgrundlinie des Titels ausgerichtet sein. */
+  .theme-toggle{
+    align-self:center;
+    flex: none;
+    width:38px;
+    height:38px;
+    border-radius:50%;
+    border: 1.5px solid var(--inchiostro);
+    background: var(--flaeche);
+    font-size:17px;
+    line-height:1;
     display:flex;
     align-items:center;
-    gap:6px;
-    background: rgba(255,255,255,0.4);
+    justify-content:center;
+    padding:0;
+    cursor:pointer;
+    box-shadow: 2px 2px 0 var(--inchiostro);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.15s ease, border-color 0.15s ease;
   }
-  .dot{width:7px; height:7px; border-radius:50%;}
-  .dot.cielo{background:var(--cielo);}
-  .dot.mare{background:var(--mare);}
-  .dot.azzurro{background:var(--azzurro);}
+  .theme-toggle:active{ transform: translate(1px,1px); box-shadow: 1px 1px 0 var(--inchiostro); }
 
   .stage{
     flex:1;
@@ -233,11 +355,14 @@
     box-shadow: 6px 6px 0 var(--inchiostro);
     transition: transform 0.35s cubic-bezier(.4,.2,.2,1), opacity 0.25s ease;
   }
-  .face.front{ background: #f8fbfe; }
-  .face.back, .face.notiz{
-    background: var(--inchiostro);
-    color: var(--carta);
-  }
+  /* Frage ist jetzt die hervorgehobene Seite (kräftiges, aber helleres Blau
+     als das vorherige dunkle Marineblau) -- Antwort ist im Gegenzug die
+     helle Seite (genau die Optik, die vorher die Frage hatte). Die
+     Zusatzseiten (seite3/seite4) bekommen nur einen sehr dezenten Hauch von
+     Blau, damit sie sich weder mit Frage noch mit Antwort verwechseln lassen. */
+  .face.front{ background: var(--azzurro); color: var(--carta); }
+  .face.back{ background: var(--flaeche); color: var(--inchiostro); }
+  .face.notiz{ background: var(--flaeche-tief); color: var(--inchiostro); }
   .face.eintretend{
     transform: scale(0.96);
     opacity: 0;
@@ -260,7 +385,6 @@
     line-height:1.1;
     margin-bottom:10px;
   }
-  .face.back .wort{ color: var(--azzurro); }
 
   .hinweis{
     font-size:12px;
@@ -286,7 +410,6 @@
   .seite-bild-fehler{
     font-size:13px;
     line-height:1.5;
-    color: var(--carta);
     opacity:0.7;
     max-width:90%;
   }
@@ -305,7 +428,7 @@
     padding: 14px 0;
     flex:1;
     cursor:pointer;
-    background:#f8fbfe;
+    background: var(--flaeche);
     color:var(--inchiostro);
     transition: transform 0.12s ease, box-shadow 0.12s ease;
     box-shadow: 3px 3px 0 var(--inchiostro);
@@ -316,8 +439,8 @@
     font-size:13px;
     padding:11px 0;
   }
-  .btn-zurueck{ background: #eaf5fb; }
-  .btn-weiter{ background: var(--azzurro); color:#f8fbfe; }
+  .btn-zurueck{ background: var(--flaeche-alt); }
+  .btn-weiter{ background: var(--azzurro); color: var(--flaeche); }
 
   /* Merken-Button: bewusst zwischen Zurück/Weiter, in der eigenen
      Wiedervorlage-Akzentfarbe (--bernstein). Unmarkiert nur ein dezenter
@@ -327,13 +450,13 @@
   .btn-merken{
     font-size:13px;
     padding:11px 4px;
-    background: rgba(217,142,59,0.14);
+    background: var(--merken-tint);
     border-color: var(--bernstein);
     color: var(--bernstein);
   }
   .btn-merken.aktiv{
     background: var(--bernstein);
-    color: #fffaf3;
+    color: var(--bernstein-text);
   }
 
   button:disabled{ opacity:0.35; cursor:default; }
@@ -355,8 +478,7 @@
     text-align:center;
     padding: 40px 10px;
   }
-  .fertig .wort{ font-size:24px; }
-  .fertig p{ opacity:0.6; font-size:14px; margin: 10px 0 22px; }
+  .fertig .wort{ font-size:24px; margin-bottom:22px; }
 
   @media (prefers-reduced-motion: reduce){
     .card{ transition: none; }
@@ -396,7 +518,7 @@
     border: 1.5px solid var(--inchiostro);
     border-radius: 14px;
     padding: 18px 20px;
-    background: #f8fbfe;
+    background: var(--flaeche);
     cursor:pointer;
     box-shadow: 4px 4px 0 var(--inchiostro);
     transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -432,6 +554,37 @@
     font-size:15px;
     color: var(--mare);
   }
+
+  /* Tabellenansicht (Liste) */
+  .liste-wrapper{
+    max-height: 60vh;
+    overflow-y:auto;
+    width:100%;
+    max-width:420px;
+    border: 1.5px solid var(--inchiostro);
+    border-radius: 12px;
+  }
+  .liste-tabelle{
+    width:100%;
+    border-collapse: collapse;
+    font-size:14px;
+  }
+  .liste-tabelle th{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    text-align:left;
+    padding: 9px 12px;
+    border-bottom: 2px solid var(--inchiostro);
+    color: var(--inchiostro);
+    background: var(--carta);
+    position: sticky;
+    top: 0;
+  }
+  .liste-tabelle td{
+    padding: 7px 12px;
+    border-bottom: 1px solid rgba(var(--inchiostro-rgb), 0.12);
+  }
+  .liste-tabelle tr:nth-child(even) td{ background: var(--tabellen-tint); }
   .niveau-wechsel{
     text-align:center;
     margin-top: 12px;
@@ -482,7 +635,7 @@
     border: 1.5px solid var(--mare);
     border-radius: 12px;
     padding: 12px 16px;
-    background: #eef5fa;
+    background: var(--flaeche-tief);
     cursor:pointer;
     box-shadow: 3px 3px 0 var(--mare);
     transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -510,7 +663,7 @@
   .modal-overlay{
     position:fixed;
     inset:0;
-    background: rgba(23,50,79,0.55);
+    background: var(--overlay-dunkel);
     display:flex;
     align-items:center;
     justify-content:center;
@@ -567,7 +720,7 @@
     border: 1.5px solid var(--inchiostro);
     border-radius: 10px;
     padding: 8px 16px;
-    background: rgba(127,178,214,0.22);
+    background: var(--stundenplan-tint);
     cursor:pointer;
     box-shadow: 2px 2px 0 var(--inchiostro);
     font-size:13px;
@@ -596,7 +749,7 @@
     border-collapse: collapse;
     width:100%;
     font-size:12px;
-    background:#f8fbfe;
+    background: var(--flaeche);
   }
   .stundenplan-tabelle th, .stundenplan-tabelle td{
     border: 1px solid var(--linea);
@@ -632,7 +785,7 @@
   .upload-text{ font-size:13px; opacity:0.6; line-height:1.5; }
   .upload-text strong{ color: var(--mare); }
   .upload-fehler{
-    background: #e8f1f7;
+    background: var(--fehler-bg);
     border: 1.5px solid var(--mare);
     border-radius: 10px;
     padding: 10px 14px;
@@ -655,7 +808,7 @@
      --bernstein statt der sonst durchgängigen Blautöne -- das signalisiert
      "besonderer Stapel", ohne wie ein zusätzliches Deck zu wirken. */
   .niveau-btn.wiedervorlage{
-    background: rgba(217,142,59,0.14);
+    background: var(--merken-tint);
     border-color: var(--bernstein);
     box-shadow: 4px 4px 0 var(--bernstein);
   }
@@ -663,7 +816,7 @@
   .niveau-btn.wiedervorlage .label{ color: var(--bernstein); }
 
   .datei-laden-fehler{
-    background: #e8f1f7;
+    background: var(--fehler-bg);
     border: 1.5px solid var(--mare);
     border-radius: 10px;
     padding: 10px 14px;
@@ -683,15 +836,12 @@
       <div class="titel" id="titelHome" style="cursor:pointer;">Smart<em>Cards</em></div>
       <div class="untertitel" id="untertitelText">Karteikarten</div>
     </div>
+    <button class="theme-toggle" id="themeToggle" title="Farbschema wechseln" aria-label="Farbschema wechseln">🎨</button>
   </header>
-
-  <div class="stats" id="statsRow">
-    <div class="pill"><span class="dot azzurro"></span><span id="statHeute">0</span> Karten heute</div>
-  </div>
 
   <div class="stage" id="stage"></div>
 
-  <div class="reset-row" id="resetRow"><a id="resetLink">Fortschritt zurücksetzen</a> · <a id="deckLink">Deck wechseln</a></div>
+  <div class="reset-row" id="deckWechselRow"><a id="deckLink">Deck wechseln</a></div>
 </div>
 
 <script>
@@ -700,7 +850,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.15';
+const APP_VERSION = '1.19';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
@@ -762,7 +912,6 @@ function vokabelnNeuLaden(){
 let VOKABELN = [];
 let idx = 0;
 let zustand = 0; // 0 = Frage, 1 = Antwort, 2 = Notiz (nur wenn vorhanden)
-let punkte = { heute:0 };
 
 // Falls window.storage nicht existiert (z.B. beim Hosting auf GitHub Pages,
 // im Gegensatz zur Claude-Artefakt-Umgebung, wo diese API bereitgestellt wird),
@@ -796,8 +945,7 @@ if (typeof window.storage === 'undefined') {
 }
 
 const stage = document.getElementById('stage');
-const statsRow = document.getElementById('statsRow');
-const resetRow = document.getElementById('resetRow');
+const deckWechselRow = document.getElementById('deckWechselRow');
 const untertitelText = document.getElementById('untertitelText');
 
 // ---------- Persistenz: Datei (alle Decks + Stundenplan) ----------
@@ -829,6 +977,37 @@ async function ladeWiedervorlage(){
 }
 async function speichereWiedervorlage(){
   try{ await window.storage.set('wiedervorlage', JSON.stringify(WIEDERVORLAGE)); }catch(e){}
+}
+
+// ---------- Persistenz: Farbschema ----------
+// Reihenfolge, in der der Button im Header durchschaltet. "blau" ist der
+// Startzustand (data-theme auf <html> steht ohne gespeicherte Wahl bereits
+// darauf), die anderen drei sind neu.
+const FARBSCHEMEN = ['blau', 'rot', 'gruen', 'rosa'];
+let AKTUELLES_FARBSCHEMA = 'blau';
+
+async function ladeFarbschema(){
+  try{
+    const res = await window.storage.get('farbschema');
+    if(res && res.value && FARBSCHEMEN.includes(res.value)) return res.value;
+  }catch(e){}
+  return 'blau';
+}
+async function speichereFarbschema(schema){
+  try{ await window.storage.set('farbschema', schema); }catch(e){}
+}
+
+// Setzt das Farbschema tatsächlich um: data-theme auf <html> steuert per CSS
+// ([data-theme="..."]-Blöcke im <style>) sämtliche Farbvariablen der App.
+// Die <meta name="theme-color">, die die Farbe der Browser-Kopfzeile auf dem
+// Handy bestimmt, wird bewusst nicht ein zweites Mal fest verdrahtet --
+// stattdessen liest getComputedStyle() einfach den gerade aktiven Wert von
+// --inchiostro aus, exakt dieselbe Farbe, die auch der Rest der App nutzt.
+function wendeFarbschemaAn(schema){
+  document.documentElement.setAttribute('data-theme', schema);
+  const inchiostro = getComputedStyle(document.documentElement).getPropertyValue('--inchiostro').trim();
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta && inchiostro) meta.setAttribute('content', inchiostro);
 }
 
 // Eigener Bestätigungs-Dialog als Ersatz für window.confirm() -- siehe
@@ -866,13 +1045,13 @@ function zeigeBestaetigungsDialog(text, bestaetigenText){
 }
 
 // Setzt die komplette App zurück: löscht alle gespeicherten Daten (die
-// hochgeladene Datei inkl. Stundenplan, UND jeglichen Fortschritt in jedem
-// Deck) und lädt die Seite danach neu.
+// hochgeladene Datei inkl. Stundenplan und die Wiedervorlage) und lädt die
+// Seite danach neu.
 //
 // Bewusst per location.reload() statt die In-Memory-Variablen (AKTIVE_DATEI,
-// DECK_NAME, VOKABELN, idx, punkte, STUNDENPLAN, ...) einzeln von Hand auf
-// ihren Ausgangswert zu setzen: ein Reload startet init() ganz neu und liest
-// dabei den (jetzt leeren) Storage neu ein -- das garantiert exakt denselben
+// DECK_NAME, VOKABELN, idx, STUNDENPLAN, ...) einzeln von Hand auf ihren
+// Ausgangswert zu setzen: ein Reload startet init() ganz neu und liest dabei
+// den (jetzt leeren) Storage neu ein -- das garantiert exakt denselben
 // Zustand wie beim allerersten echten Laden der App. Manuelles Zurücksetzen
 // müsste dagegen bei jeder neuen Variable, die später im Code dazukommt,
 // mitgepflegt werden und wäre eine wiederkehrende Fehlerquelle.
@@ -885,7 +1064,7 @@ async function setzeAppKomplettZurueck(){
 
   try{
     await window.storage.delete('vocab-datei');
-    await loescheAltenFortschritt();
+    await raeumeBeimDateiwechselAuf();
   }catch(e){
     // Falls das Löschen (teilweise) fehlschlägt, trotzdem neu laden --
     // dann zeigt die App wenigstens den tatsächlichen Ist-Zustand, statt in
@@ -895,13 +1074,14 @@ async function setzeAppKomplettZurueck(){
   location.reload();
 }
 
-// Alte Fortschritts-Einträge löschen, wenn eine neue Datei hochgeladen wird —
-// sonst würde z.B. der Kartenindex eines alten Decks auf ein Deck mit anderem
-// Inhalt, aber gleichem Blattnamen, angewendet. Die Wiedervorlage wird hier
-// bewusst mit zurückgesetzt: ihre Einträge sind Kopien von Karten aus der
-// bisherigen Datei -- mit einer neuen Datei (oder nach einem Komplett-Reset)
-// wären das Karteileichen ohne Bezug zu den dann aktiven Decks.
-async function loescheAltenFortschritt(){
+// Räumt auf, wenn eine neue Datei hochgeladen (oder die App komplett
+// zurückgesetzt) wird. Die Wiedervorlage wird zurückgesetzt: ihre Einträge
+// sind Kopien von Karten aus der bisherigen Datei -- mit einer neuen Datei
+// wären das Karteileichen ohne Bezug zu den dann aktiven Decks. Das Aufräumen
+// alter "vocab-progress-"-Einträge ist reine Datenhygiene für Stände aus
+// Versionen vor v1.19 (seitdem verfolgt SmartCards keinen Fortschritt mehr) --
+// neue solche Einträge entstehen nicht mehr.
+async function raeumeBeimDateiwechselAuf(){
   try{
     const liste = await window.storage.list('vocab-progress-');
     if(liste && liste.keys){
@@ -912,41 +1092,9 @@ async function loescheAltenFortschritt(){
   }catch(e){}
 }
 
-// ---------- Persistenz: Fortschritt pro Deck ----------
-async function ladeFortschritt(deckName){
-  try{
-    const res = await window.storage.get('vocab-progress-' + deckName);
-    if(res && res.value){
-      const daten = JSON.parse(res.value);
-      // daten.punkte kann bei älteren, vor diesem Update gespeicherten Ständen noch
-      // leicht/schwierig enthalten -- die werden hier einfach ignoriert, da wir nur
-      // noch heute auslesen. { heute:0, ...daten.punkte } würde sie sogar zurückholen,
-      // deshalb explizit nur heute übernehmen.
-      punkte = { heute: (daten.punkte && daten.punkte.heute) || 0 };
-      idx = (daten.idx || 0) % VOKABELN.length;
-      aktualisiereStats();
-      return;
-    }
-  }catch(e){}
-  punkte = { heute:0 };
-  idx = 0;
-  aktualisiereStats();
-}
-
-async function speichereFortschritt(){
-  try{
-    await window.storage.set('vocab-progress-' + DECK_NAME, JSON.stringify({ punkte, idx }));
-  }catch(e){}
-}
-
-function aktualisiereStats(){
-  document.getElementById('statHeute').textContent = punkte.heute;
-}
-
 // ---------- Bildschirme ----------
 function zeigeLeerenZustand(){
-  statsRow.style.display = 'none';
-  resetRow.style.display = 'none';
+  deckWechselRow.style.display = 'none';
   untertitelText.textContent = 'Karteikarten';
   stage.innerHTML = `
     <div class="niveau-screen">
@@ -960,8 +1108,7 @@ function zeigeLeerenZustand(){
 }
 
 function zeigeDeckAuswahl(){
-  statsRow.style.display = 'none';
-  resetRow.style.display = 'none';
+  deckWechselRow.style.display = 'none';
   untertitelText.textContent = 'Karteikarten';
 
   const namen = Object.keys(AKTIVE_DATEI);
@@ -1021,8 +1168,7 @@ function zeigeDeckAuswahl(){
 // "Pause" bzw. "Essen" in irgendeiner Zelle werden eingefärbt, ganz analog
 // zur Original-xlsx-Vorlage (dort waren das die gelbe bzw. rötliche Zeile).
 function zeigeStundenplan(){
-  statsRow.style.display = 'none';
-  resetRow.style.display = 'none';
+  deckWechselRow.style.display = 'none';
   untertitelText.textContent = 'Stundenplan';
 
   // z.farbe gilt für Kopf- wie für Datenzellen gleichermaßen -- hat eine Zelle
@@ -1063,8 +1209,7 @@ function zeigeStundenplan(){
 //    auch falls das Nachladen von config.xlsx (Netzwerk!) noch dauert oder
 //    komplett fehlschlägt.
 function zeigeLadenAuswahl(){
-  statsRow.style.display = 'none';
-  resetRow.style.display = 'none';
+  deckWechselRow.style.display = 'none';
   untertitelText.textContent = 'Karteikarten';
 
   stage.innerHTML = `
@@ -1144,7 +1289,7 @@ function renderVordefinierteSets(eintraege){
         if(Object.keys(decks).length === 0 && !stundenplan){
           throw new Error('Datei gefunden, aber keine gültigen Arbeitsblätter darin.');
         }
-        await loescheAltenFortschritt();
+        await raeumeBeimDateiwechselAuf();
         await speichereDatei(decks, stundenplan);
         AKTIVE_DATEI = decks;
         STUNDENPLAN = stundenplan;
@@ -1229,7 +1374,7 @@ async function verarbeiteDatei(file){
     return;
   }
 
-  await loescheAltenFortschritt();
+  await raeumeBeimDateiwechselAuf();
   await speichereDatei(decks, stundenplan);
   AKTIVE_DATEI = decks;
   STUNDENPLAN = stundenplan;
@@ -1452,7 +1597,7 @@ async function ladeDeckDateiVonGithub(dateiname){
 async function waehleDeck(name){
   WIEDERVORLAGE_MODUS = false;
   DECK_NAME = name;
-  await ladeFortschritt(name);
+  idx = 0;
   untertitelText.textContent = `Deck · ${DECK_NAME}`;
   zeigeSortierAuswahl();
 }
@@ -1461,15 +1606,10 @@ async function waehleDeck(name){
 // Sortiert/Gemischt-Zwischenschritt, gleiche Kartenansicht) -- einziger
 // Unterschied ist WIEDERVORLAGE_MODUS = true, wodurch vokabelnNeuLaden()
 // WIEDERVORLAGE statt eines Decks aus AKTIVE_DATEI als Quelle nimmt.
-// Nutzt DECK_NAME = WIEDERVORLAGE_NAME auch als Fortschritts-Storage-Key --
-// exakt dasselbe Muster wie bei einem normalen Deck. Einzige (bewusst in
-// Kauf genommene) Einschränkung: hieße eines der echten Decks in der xlsx
-// zufällig ebenfalls "Wiedervorlage", würden sich beide denselben
-// Fortschritts-Eintrag teilen.
 async function waehleWiedervorlage(){
   WIEDERVORLAGE_MODUS = true;
   DECK_NAME = WIEDERVORLAGE_NAME;
-  await ladeFortschritt(DECK_NAME);
+  idx = 0;
   untertitelText.textContent = `Deck · ${DECK_NAME}`;
   zeigeSortierAuswahl();
 }
@@ -1495,43 +1635,50 @@ function zeigeSortierAuswahl(){
   `;
   document.getElementById('btnSortiert').onclick = () => waehleSortierung(true);
   document.getElementById('btnGemischt').onclick = () => waehleSortierung(false);
-  document.getElementById('btnListe').onclick = () => exportiereDeckAlsXLSX();
+  document.getElementById('btnListe').onclick = () => zeigeListenAnsicht();
 }
 
-// Exportiert das aktuell gewählte Deck (nur Spalten Frage/Antwort) als eigene
-// .xlsx-Datei, die der Browser zum Download anbietet -- tippt man die
-// heruntergeladene Datei an, öffnet sie sich wie gewohnt in Excel, Numbers,
-// Google Sheets & Co. Nutzt bewusst NICHT VOKABELN als Quelle, sondern die
-// Original-Reihenfolge aus AKTIVE_DATEI (bzw. WIEDERVORLAGE): VOKABELN könnte
-// bei "Gemischt" bereits durchmischt sein, ein Export als Nachschlagewerk
-// sollte aber unabhängig von der Karteikarten-Reihenfolge stabil bleiben --
-// gleiches Prinzip wie in vokabelnNeuLaden().
-async function exportiereDeckAlsXLSX(){
+// Zeigt das komplette Deck als Tabelle (nur Spalten Frage/Antwort) direkt in
+// der App an -- kein Datei-Download, sondern eine Ansicht zum schnellen
+// Nachschlagen, wie im Schwester-Projekt Vocabolario. Nutzt bewusst die
+// ORIGINAL-Reihenfolge aus AKTIVE_DATEI (bzw. WIEDERVORLAGE), nicht VOKABELN:
+// das könnte bei "Gemischt" bereits durchmischt sein, eine Liste als
+// Nachschlagewerk sollte aber unabhängig von der Karteikarten-Reihenfolge
+// stabil bleiben (gleiches Prinzip wie in vokabelnNeuLaden()).
+function zeigeListenAnsicht(){
+  deckWechselRow.style.display = 'none';
+  untertitelText.textContent = `Deck · ${DECK_NAME}`;
+
+  const escape = s => String(s || '').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
+
   const quelle = WIEDERVORLAGE_MODUS ? WIEDERVORLAGE : AKTIVE_DATEI[DECK_NAME];
-  const daten = [['Frage', 'Antwort'], ...quelle.map(v => [v.frage, v.antwort])];
 
-  await ladeSheetJSBibliothek();
-  const ws = XLSX.utils.aoa_to_sheet(daten);
-  ws['!cols'] = [{ wch: 32 }, { wch: 32 }];
-  const wb = XLSX.utils.book_new();
+  const zeilen = quelle.map(v => `
+    <tr><td>${escape(v.frage)}</td><td>${escape(v.antwort)}</td></tr>
+  `).join('');
 
-  // Blattnamen sind in xlsx auf 31 Zeichen begrenzt und dürfen bestimmte
-  // Zeichen nicht enthalten ( \ / ? * [ ] : ) -- der Deck-Name könnte beides
-  // verletzen, deshalb hier bereinigt. Für den Dateinamen reicht eine simple
-  // Ersetzung der auf den gängigen Betriebssystemen verbotenen Zeichen.
-  const blattname = DECK_NAME.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Deck';
-  XLSX.utils.book_append_sheet(wb, ws, blattname);
+  stage.innerHTML = `
+    <div class="niveau-screen">
+      <div class="niveau-frage">${escape(DECK_NAME)}</div>
+      <div class="liste-wrapper">
+        <table class="liste-tabelle">
+          <thead><tr><th>Frage</th><th>Antwort</th></tr></thead>
+          <tbody>${zeilen}</tbody>
+        </table>
+      </div>
+      <div style="margin-top:16px;">
+        <button id="btnListeZurueck" style="box-shadow:3px 3px 0 var(--inchiostro); font-size:13px; padding:10px 0;">← Zurück</button>
+      </div>
+    </div>
+  `;
 
-  const dateiname = DECK_NAME.replace(/[\\/:*?"<>|]/g, '_') + '.xlsx';
-  XLSX.writeFile(wb, dateiname);
+  document.getElementById('btnListeZurueck').onclick = () => zeigeSortierAuswahl();
 }
 
 function waehleSortierung(sortiert){
   SORTIERT = sortiert;
   VOKABELN = vokabelnNeuLaden();
-  statsRow.style.display = 'flex';
-  resetRow.style.display = 'block';
-  aktualisiereStats();
+  deckWechselRow.style.display = 'block';
   render();
 }
 
@@ -1610,11 +1757,10 @@ function render(){
     stage.innerHTML = `
       <div class="fertig">
         <div class="wort">Stapel geschafft 🎉</div>
-        <p>${punkte.heute} Karten heute gelernt.</p>
         <button id="nochmal" style="box-shadow:3px 3px 0 var(--inchiostro)">Von vorne beginnen</button>
         <div class="reset-row" style="margin-top:14px;"><a id="zurueckZurLetzten">← Zur letzten Karte zurück</a></div>
       </div>`;
-    document.getElementById('nochmal').onclick = () => { idx = 0; VOKABELN = vokabelnNeuLaden(); speichereFortschritt(); render(); };
+    document.getElementById('nochmal').onclick = () => { idx = 0; VOKABELN = vokabelnNeuLaden(); render(); };
     document.getElementById('zurueckZurLetzten').onclick = () => { idx = VOKABELN.length - 1; render(); };
     return;
   }
@@ -1716,7 +1862,6 @@ async function toggleMerken(){
     const posVokabeln = VOKABELN.indexOf(v);
     if(posVokabeln !== -1) VOKABELN.splice(posVokabeln, 1);
     await speichereWiedervorlage();
-    await speichereFortschritt();
     render();
     return;
   }
@@ -1732,31 +1877,18 @@ async function toggleMerken(){
 }
 
 function weiter(){
-  punkte.heute++;
   idx++;
-  speichereFortschritt();
-  aktualisiereStats();
   render();
 }
 
 // Eine Karte zurückspringen. idx wird nie unter 0 gesetzt -- der Zurück-Button
 // ist bei der ersten Karte ohnehin deaktiviert (siehe render()), das hier ist
-// nur eine zusätzliche Absicherung. punkte.heute wird bewusst NICHT verringert:
-// Zurückblättern ist kein "Rückgängigmachen" des Lernens, sondern nur Navigation.
+// nur eine zusätzliche Absicherung.
 function vorherige(){
   if(idx === 0) return;
   idx--;
-  speichereFortschritt();
   render();
 }
-
-document.getElementById('resetLink').onclick = async () => {
-  idx = 0;
-  punkte = { heute:0 };
-  await speichereFortschritt();
-  aktualisiereStats();
-  render();
-};
 
 document.getElementById('deckLink').onclick = () => {
   zeigeDeckAuswahl();
@@ -1772,9 +1904,19 @@ document.getElementById('titelHome').onclick = () => {
   if(AKTIVE_DATEI) zeigeDeckAuswahl(); else zeigeLeerenZustand();
 };
 
+// Ein Klick schaltet immer zum NÄCHSTEN Schema in FARBSCHEMEN weiter (mit
+// Umbruch am Ende zurück zu "blau") -- kein Auswahlmenü, wie gewünscht.
+document.getElementById('themeToggle').onclick = async () => {
+  const pos = FARBSCHEMEN.indexOf(AKTUELLES_FARBSCHEMA);
+  AKTUELLES_FARBSCHEMA = FARBSCHEMEN[(pos + 1) % FARBSCHEMEN.length];
+  wendeFarbschemaAn(AKTUELLES_FARBSCHEMA);
+  await speichereFarbschema(AKTUELLES_FARBSCHEMA);
+};
+
 (async function init(){
-  statsRow.style.display = 'none';
-  resetRow.style.display = 'none';
+  deckWechselRow.style.display = 'none';
+  AKTUELLES_FARBSCHEMA = await ladeFarbschema();
+  wendeFarbschemaAn(AKTUELLES_FARBSCHEMA);
   WIEDERVORLAGE = await ladeWiedervorlage();
   const gespeichert = await ladeDatei();
   const decks = gespeichert && gespeichert.decks;
