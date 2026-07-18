@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  SmartCards — Version 1.25
+  SmartCards — Version 1.26
   Änderungshistorie:
   v1.0 – Umbenennung von "VocabolarIo" zu "SmartCards", alle Italienisch-spezifischen
          Funktionen entfernt (Konjugator, 500-Verben-Beispielsätze, Verbtyp-Erkennung,
@@ -202,6 +202,9 @@
          initialen Kartenanzeige, nach jedem Wenden und nach dem Einblenden
          der Prüfpfad-Lösung (jeweils per requestAnimationFrame, damit das
          Layout vor der Messung tatsächlich steht).
+  v1.26 – Optik: "Decks zurücksetzen" auf der Deck-Auswahl etwas größer
+         (14px statt 12px) und mit mehr Abstand nach unten (margin-bottom
+         26px statt 0).
 -->
 <html lang="de" data-theme="blau">
 <head>
@@ -797,7 +800,8 @@
   .niveau-wechsel{
     text-align:center;
     margin-top: 12px;
-    font-size:12px;
+    margin-bottom: 26px;
+    font-size:14px;
   }
   .niveau-wechsel a{
     color: var(--inchiostro);
@@ -1059,7 +1063,7 @@
 // in der Datei ist nur für Menschen, die die Historie lesen wollen; dieser const
 // hier ist der, den der Code tatsächlich zur Laufzeit nutzen kann (z.B. für dieses
 // console.log, oder später z.B. um in einer Fehlermeldung die Version mitzuschicken).
-const APP_VERSION = '1.25';
+const APP_VERSION = '1.26';
 console.log(`SmartCards v${APP_VERSION}`);
 
 // Baut die Liste der zusätzlichen Kartenseiten (nach front/back), die diese Karte
